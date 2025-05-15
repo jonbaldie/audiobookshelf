@@ -60,20 +60,7 @@ export default class LocalAudioPlayer extends EventEmitter {
     })
     console.log(`[LocalPlayer] Supported mime types`, mimeTypeCanPlayMap, this.playableMimeTypes)
 
-    // --- Setup Web Audio for smart-speed ---
-    try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext
-      this.audioCtx = new AudioCtx()
-      this.sourceNode = this.audioCtx.createMediaElementSource(this.player)
-      this.analyserNode = this.audioCtx.createAnalyser()
-      this.processorNode = this.audioCtx.createScriptProcessor(4096, 1, 1)
-      this.sourceNode.connect(this.analyserNode)
-      this.analyserNode.connect(this.processorNode)
-      this.processorNode.connect(this.audioCtx.destination)
-      this.processorNode.onaudioprocess = this.handleAudioProcess.bind(this)
-    } catch (err) {
-      console.warn('[LocalPlayer] Web Audio init failed, smart-speed disabled', err)
-    }
+
   }
 
   evtPlay() {
@@ -271,8 +258,17 @@ export default class LocalAudioPlayer extends EventEmitter {
 
   play() {
     this.playWhenReady = true
+
+    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume()
+    }
     if (this.player) this.player.play()
   }
+
+  /**
+   * Initializes Web Audio nodes for smart-speed on first play.
+   */
+
 
   pause() {
     this.playWhenReady = false
