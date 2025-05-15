@@ -17,6 +17,12 @@
       <div class="flex items-center mb-4">
         <ui-select-input v-model="playbackRateIncrementDecrement" :label="$strings.LabelPlaybackRateIncrementDecrement" menuMaxHeight="250px" :items="playbackRateIncrementDecrementValues" @input="setPlaybackRateIncrementDecrementAmount" />
       </div>
+      <div class="flex items-center mb-4">
+        <ui-toggle-switch v-model="smartSpeedEnabled" @input="setSmartSpeedEnabled" />
+        <div class="pl-4">
+          <span>{{ $strings.LabelSmartSpeed }}</span>
+        </div>
+      </div>
     </div>
   </modals-modal>
 </template>
@@ -40,7 +46,8 @@ export default {
       jumpForwardAmount: 10,
       jumpBackwardAmount: 10,
       playbackRateIncrementDecrementValues: [0.1, 0.05],
-      playbackRateIncrementDecrement: 0.1
+      playbackRateIncrementDecrement: 0.1,
+      smartSpeedEnabled: false
     }
   },
   computed: {
@@ -69,11 +76,15 @@ export default {
       this.playbackRateIncrementDecrement = val
       this.$store.dispatch('user/updateUserSettings', { playbackRateIncrementDecrement: val })
     },
+    setSmartSpeedEnabled() {
+      this.$store.dispatch('user/updateUserSettings', { smartSpeedEnabled: this.smartSpeedEnabled })
+    },
     settingsUpdated() {
       this.useChapterTrack = this.$store.getters['user/getUserSetting']('useChapterTrack')
       this.jumpForwardAmount = this.$store.getters['user/getUserSetting']('jumpForwardAmount')
       this.jumpBackwardAmount = this.$store.getters['user/getUserSetting']('jumpBackwardAmount')
       this.playbackRateIncrementDecrement = this.$store.getters['user/getUserSetting']('playbackRateIncrementDecrement')
+      this.smartSpeedEnabled = this.$store.getters['user/getUserSetting']('smartSpeedEnabled')
     }
   },
   mounted() {

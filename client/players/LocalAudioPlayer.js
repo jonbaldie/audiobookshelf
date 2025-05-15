@@ -1,5 +1,6 @@
 import Hls from 'hls.js'
 import EventEmitter from 'events'
+import { detectSilences } from './silenceDetector.js'
 
 export default class LocalAudioPlayer extends EventEmitter {
   constructor(ctx) {
@@ -20,6 +21,10 @@ export default class LocalAudioPlayer extends EventEmitter {
     this.defaultPlaybackRate = 1
 
     this.playableMimeTypes = []
+    // Smart-speed (silence skipping)
+    this.smartSpeedEnabled = false
+    this.smartSpeedThresholdDb = -50
+    this.smartSpeedMinSec = 0.5
 
     this.initialize()
   }
@@ -54,6 +59,21 @@ export default class LocalAudioPlayer extends EventEmitter {
       if (canPlay) this.playableMimeTypes.push(mt)
     })
     console.log(`[LocalPlayer] Supported mime types`, mimeTypeCanPlayMap, this.playableMimeTypes)
+
+    // --- Setup Web Audio for smart-speed ---
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext
+      this.audioCtx = new AudioCtx()
+      this.sourceNode = this.audioCtx.createMediaElementSource(this.player)
+      this.analyserNode = this.audioCtx.createAnalyser()
+      this.processorNode = this.audioCtx.createScriptProcessor(4096, 1, 1)
+      this.sourceNode.connect(this.analyserNode)
+      this.analyserNode.connect(this.processorNode)
+      this.processorNode.connect(this.audioCtx.destination)
+      this.processorNode.onaudioprocess = this.handleAudioProcess.bind(this)
+    } catch (err) {
+      console.warn('[LocalPlayer] Web Audio init failed, smart-speed disabled', err)
+    }
   }
 
   evtPlay() {
@@ -97,6 +117,25 @@ export default class LocalAudioPlayer extends EventEmitter {
   evtTimeupdate() {
     if (this.player.paused) {
       this.emit('timeupdate', this.getCurrentTime())
+    }
+  }
+
+  handleAudioProcess(event) {
+    if (!this.smartSpeedEnabled) return;
+    const samples = event.inputBuffer.getChannelData(0)
+    const sr = this.audioCtx.sampleRate
+    const intervals = detectSilences(
+      samples,
+      sr,
+      this.smartSpeedThresholdDb,
+      this.smartSpeedMinSec
+    )
+    if (intervals.length && !this._skipLock) {
+      this._skipLock = true
+      const interval = intervals[0]
+      const newTime = this.player.currentTime + interval.end + 0.01
+      this.player.currentTime = newTime
+      setTimeout(() => { this._skipLock = false }, 100)
     }
   }
 
