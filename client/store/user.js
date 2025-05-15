@@ -18,7 +18,8 @@ export const state = () => ({
     authorSortDesc: false,
     jumpForwardAmount: 10,
     jumpBackwardAmount: 10,
-    smartSpeedEnabled: false
+    smartSpeedEnabled: false,
+    smartSpeedMinSec: 0.5
   }
 })
 

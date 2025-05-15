@@ -493,6 +493,7 @@
   "LabelPlayMethod": "Play Method",
   "LabelPlaybackRateIncrementDecrement": "Playback Rate Increment/Decrement",
   "LabelSmartSpeed": "Smart Speed",
+  "LabelSmartSpeedMinDuration": "Minimum Silence Duration",
   "LabelPlayerChapterNumberMarker": "{0} of {1}",
   "LabelPlaylists": "Playlists",
   "LabelPodcast": "Podcast",

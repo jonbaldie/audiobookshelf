@@ -13,6 +13,7 @@ export default class PlayerHandler {
     this.initialPlaybackRate = 1
     // Initialize smart-speed flag from user settings
     this.smartSpeedEnabled = this.ctx.$store.getters['user/getUserSetting']('smartSpeedEnabled') || false
+    this.smartSpeedMinSec = this.ctx.$store.getters['user/getUserSetting']('smartSpeedMinSec') || 0.5
     // Subscribe to changes
     this.ctx.$eventBus.$on('user-settings', this.onUserSettingsChanged.bind(this))
     this.player = null
@@ -104,6 +105,7 @@ export default class PlayerHandler {
 
       this.player = new LocalAudioPlayer(this.ctx)
       this.player.smartSpeedEnabled = this.smartSpeedEnabled
+      this.player.smartSpeedMinSec = this.smartSpeedMinSec
 
       this.setPlayerListeners()
 
@@ -126,8 +128,11 @@ export default class PlayerHandler {
   onUserSettingsChanged() {
     const enabled = this.ctx.$store.getters['user/getUserSetting']('smartSpeedEnabled')
     this.smartSpeedEnabled = enabled
+    const minSec = this.ctx.$store.getters['user/getUserSetting']('smartSpeedMinSec')
+    this.smartSpeedMinSec = minSec
     if (this.player && this.player instanceof LocalAudioPlayer) {
       this.player.smartSpeedEnabled = enabled
+      this.player.smartSpeedMinSec = minSec
     }
   }
 
