@@ -8,7 +8,7 @@ const Database = require('../Database')
 const Watcher = require('../Watcher')
 
 const libraryItemFilters = require('../utils/queries/libraryItemFilters')
-const patternValidation = require('../libs/nodeCron/pattern-validation')
+const cron = require('../libs/nodeCron')
 const { isObject, getTitleIgnorePrefix } = require('../utils/index')
 const { sanitizeFilename } = require('../utils/fileUtils')
 
@@ -59,6 +59,12 @@ class MiscController {
     if (!library) {
       return res.status(404).send('Library not found')
     }
+
+    if (!req.user.checkCanAccessLibrary(library.id)) {
+      Logger.error(`[MiscController] User "${req.user.username}" attempting to upload to library "${library.id}" without access`)
+      return res.sendStatus(403)
+    }
+
     const folder = library.libraryFolders.find((fold) => fold.id === folderId)
     if (!folder) {
       return res.status(404).send('Folder not found')
@@ -135,6 +141,9 @@ class MiscController {
     if (settingsUpdate.allowIframe == false && process.env.ALLOW_IFRAME === '1') {
       Logger.warn('Cannot disable iframe when ALLOW_IFRAME is enabled in environment')
       return res.status(400).send('Cannot disable iframe when ALLOW_IFRAME is enabled in environment')
+    }
+    if (settingsUpdate.allowedOrigins && !Array.isArray(settingsUpdate.allowedOrigins)) {
+      return res.status(400).send('allowedOrigins must be an array')
     }
 
     const madeUpdates = Database.serverSettings.update(settingsUpdate)
@@ -596,13 +605,11 @@ class MiscController {
       return res.sendStatus(400)
     }
 
-    try {
-      patternValidation(expression)
-      res.sendStatus(200)
-    } catch (error) {
-      Logger.warn(`[MiscController] Invalid cron expression ${expression}`, error.message)
-      res.status(400).send(error.message)
+    if (!cron.validate(expression)) {
+      Logger.warn(`[MiscController] Invalid cron expression ${expression}`)
+      return res.status(400).send('Invalid cron expression')
     }
+    res.sendStatus(200)
   }
 
   /**

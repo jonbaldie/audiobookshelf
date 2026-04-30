@@ -4,6 +4,7 @@ const { getTitlePrefixAtEnd, getTitleIgnorePrefix } = require('../utils')
 const parseNameString = require('../utils/parsers/parseNameString')
 const htmlSanitizer = require('../utils/htmlSanitizer')
 const libraryItemsBookFilters = require('../utils/queries/libraryItemsBookFilters')
+const SocketAuthority = require('../SocketAuthority')
 
 /**
  * @typedef EBookFileObject
@@ -377,8 +378,17 @@ class Book extends Model {
         if (typeof payload.metadata[key] == 'number') {
           payload.metadata[key] = String(payload.metadata[key])
         }
-          
+
         if ((typeof payload.metadata[key] === 'string' || payload.metadata[key] === null) && this[key] !== payload.metadata[key]) {
+          // Sanitize description HTML
+          if (key === 'description' && payload.metadata[key]) {
+            const sanitizedDescription = htmlSanitizer.sanitize(payload.metadata[key])
+            if (sanitizedDescription !== payload.metadata[key]) {
+              Logger.debug(`[Book] "${this.title}" Sanitized description from "${payload.metadata[key]}" to "${sanitizedDescription}"`)
+              payload.metadata[key] = sanitizedDescription
+            }
+          }
+
           this[key] = payload.metadata[key] || null
 
           if (key === 'title') {
@@ -461,13 +471,23 @@ class Book extends Model {
 
     for (const author of authorsRemoved) {
       await bookAuthorModel.removeByIds(author.id, this.id)
+      const numBooks = await bookAuthorModel.getCountForAuthor(author.id)
+      if (numBooks > 0) {
+        SocketAuthority.emitter('author_updated', author.toOldJSONExpanded(numBooks))
+      }
       Logger.debug(`[Book] "${this.title}" Removed author "${author.name}"`)
       this.authors = this.authors.filter((au) => au.id !== author.id)
     }
     const authorsAdded = []
     for (const authorName of newAuthorNames) {
-      const author = await authorModel.findOrCreateByNameAndLibrary(authorName, libraryId)
+      const { author, created } = await authorModel.findOrCreateByNameAndLibrary(authorName, libraryId)
       await bookAuthorModel.create({ bookId: this.id, authorId: author.id })
+      if (created) {
+        SocketAuthority.emitter('author_added', author.toOldJSON())
+      } else {
+        const numBooks = await bookAuthorModel.getCountForAuthor(author.id)
+        SocketAuthority.emitter('author_updated', author.toOldJSONExpanded(numBooks))
+      }
       Logger.debug(`[Book] "${this.title}" Added author "${author.name}"`)
       this.authors.push(author)
       authorsAdded.push(author)

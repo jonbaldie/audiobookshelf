@@ -3,10 +3,12 @@ const packageJson = require('../../../package.json')
 const { BookshelfView } = require('../../utils/constants')
 const Logger = require('../../Logger')
 const User = require('../../models/User')
+const { sanitize } = require('../../utils/htmlSanitizer')
 
 class ServerSettings {
   constructor(settings) {
     this.id = 'server-settings'
+    /** @type {string} JWT secret key ONLY used when JWT_SECRET_KEY is not set in ENV */
     this.tokenSecret = null
 
     // Scanner
@@ -52,6 +54,7 @@ class ServerSettings {
     this.dateFormat = 'MM/dd/yyyy'
     this.timeFormat = 'HH:mm'
     this.language = 'en-us'
+    this.allowedOrigins = []
 
     this.logLevel = Logger.logLevel
 
@@ -119,11 +122,12 @@ class ServerSettings {
     this.dateFormat = settings.dateFormat || 'MM/dd/yyyy'
     this.timeFormat = settings.timeFormat || 'HH:mm'
     this.language = settings.language || 'en-us'
+    this.allowedOrigins = settings.allowedOrigins || []
     this.logLevel = settings.logLevel || Logger.logLevel
     this.version = settings.version || null
     this.buildNumber = settings.buildNumber || 0 // Added v2.4.5
 
-    this.authLoginCustomMessage = settings.authLoginCustomMessage || null // Added v2.8.0
+    this.authLoginCustomMessage = sanitize(settings.authLoginCustomMessage) || null // Added v2.8.0
     this.authActiveAuthMethods = settings.authActiveAuthMethods || ['local']
 
     this.authOpenIDIssuerURL = settings.authOpenIDIssuerURL || null
@@ -230,6 +234,7 @@ class ServerSettings {
       dateFormat: this.dateFormat,
       timeFormat: this.timeFormat,
       language: this.language,
+      allowedOrigins: this.allowedOrigins,
       logLevel: this.logLevel,
       version: this.version,
       buildNumber: this.buildNumber,
@@ -305,7 +310,7 @@ class ServerSettings {
 
   get authFormData() {
     const clientFormData = {
-      authLoginCustomMessage: this.authLoginCustomMessage
+      authLoginCustomMessage: sanitize(this.authLoginCustomMessage)
     }
     if (this.authActiveAuthMethods.includes('openid')) {
       clientFormData.authOpenIDButtonText = this.authOpenIDButtonText
@@ -323,6 +328,9 @@ class ServerSettings {
   update(payload) {
     let hasUpdates = false
     for (const key in payload) {
+      if (key === 'authLoginCustomMessage') {
+        payload[key] = sanitize(payload[key])
+      }
       if (key === 'sortingPrefixes') {
         // Sorting prefixes are updated with the /api/sorting-prefixes endpoint
         continue

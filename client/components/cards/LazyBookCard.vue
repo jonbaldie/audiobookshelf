@@ -78,7 +78,7 @@
         </div>
 
         <!-- Error widget -->
-        <ui-tooltip cy-id="ErrorTooltip" v-if="showError" :text="errorText" class="absolute bottom-4e left-0 z-10">
+        <ui-tooltip cy-id="ErrorTooltip" v-if="showError" :text="errorText" plaintext class="absolute bottom-4e left-0 z-10">
           <div :style="{ height: 1.5 + 'em', width: 2.5 + 'em' }" class="bg-error rounded-r-full shadow-md flex items-center justify-end border-r border-b border-red-300">
             <span class="material-symbols text-red-100 pr-1e" :style="{ fontSize: 0.875 + 'em' }">priority_high</span>
           </div>
@@ -101,7 +101,8 @@
         <!-- Podcast Episode # -->
         <div cy-id="podcastEpisodeNumber" v-if="recentEpisodeNumber !== null && !isHovering && !isSelectionMode && !processing" class="absolute rounded-lg bg-black/90 box-shadow-md z-10" :style="{ top: 0.375 + 'em', right: 0.375 + 'em', padding: `${0.1}em ${0.25}em` }">
           <p :style="{ fontSize: 0.8 + 'em' }">
-            Episode<span v-if="recentEpisodeNumber"> #{{ recentEpisodeNumber }}</span>
+            Episode
+            <span v-if="recentEpisodeNumber">#{{ recentEpisodeNumber }}</span>
           </p>
         </div>
 
@@ -120,12 +121,12 @@
     <!-- Alternative bookshelf title/author/sort -->
     <div cy-id="detailBottom" :id="`description-area-${index}`" v-if="isAlternativeBookshelfView || isAuthorBookshelfView" dir="auto" class="relative mt-2e mb-2e left-0 z-50 w-full">
       <div :style="{ fontSize: 0.9 + 'em' }">
-        <ui-tooltip v-if="displayTitle" :text="displayTitle" :disabled="!displayTitleTruncated" direction="bottom" :delayOnShow="500" class="flex items-center">
+        <ui-tooltip v-if="displayTitle" :text="displayTitle" plaintext :disabled="!displayTitleTruncated" direction="bottom" :delayOnShow="500" class="flex items-center">
           <p cy-id="title" ref="displayTitle" class="truncate">{{ displayTitle }}</p>
           <widgets-explicit-indicator cy-id="explicitIndicator" v-if="isExplicit" />
         </ui-tooltip>
       </div>
-      <ui-tooltip v-if="showSubtitles" :text="displaySubtitle" :disabled="!displaySubtitleTruncated" direction="bottom" :delayOnShow="500" class="flex items-center">
+      <ui-tooltip v-if="showSubtitles" :text="displaySubtitle" plaintext :disabled="!displaySubtitleTruncated" direction="bottom" :delayOnShow="500" class="flex items-center">
         <p cy-id="subtitle" class="truncate" ref="displaySubtitle" :style="{ fontSize: 0.6 + 'em' }">{{ displaySubtitle }}</p>
       </ui-tooltip>
       <p cy-id="line2" class="truncate text-gray-400" :style="{ fontSize: 0.8 + 'em' }">{{ displayLineTwo || '&nbsp;' }}</p>
@@ -198,7 +199,10 @@ export default {
       return this.store.getters['user/getSizeMultiplier']
     },
     dateFormat() {
-      return this.store.state.serverSettings.dateFormat
+      return this.store.getters['getServerSetting']('dateFormat')
+    },
+    timeFormat() {
+      return this.store.getters['getServerSetting']('timeFormat')
     },
     _libraryItem() {
       return this.libraryItem || {}
@@ -345,6 +349,18 @@ export default {
         if (this.mediaMetadata.publishedYear) return this.$getString('LabelPublishedDate', [this.mediaMetadata.publishedYear])
         return '\u00A0'
       }
+      if (this.orderBy === 'progress') {
+        if (!this.userProgressLastUpdated) return '\u00A0'
+        return this.$getString('LabelLastProgressDate', [this.$formatDatetime(this.userProgressLastUpdated, this.dateFormat, this.timeFormat)])
+      }
+      if (this.orderBy === 'progress.createdAt') {
+        if (!this.userProgressStartedDate) return '\u00A0'
+        return this.$getString('LabelStartedDate', [this.$formatDatetime(this.userProgressStartedDate, this.dateFormat, this.timeFormat)])
+      }
+      if (this.orderBy === 'progress.finishedAt') {
+        if (!this.userProgressFinishedDate) return '\u00A0'
+        return this.$getString('LabelFinishedDate', [this.$formatDatetime(this.userProgressFinishedDate, this.dateFormat, this.timeFormat)])
+      }
       return null
     },
     episodeProgress() {
@@ -376,6 +392,18 @@ export default {
     userProgressPercent() {
       let progressPercent = this.itemIsFinished ? 1 : this.booksInSeries ? this.seriesProgressPercent : this.useEBookProgress ? this.userProgress?.ebookProgress || 0 : this.userProgress?.progress || 0
       return Math.max(Math.min(1, progressPercent), 0)
+    },
+    userProgressLastUpdated() {
+      if (!this.userProgress) return null
+      return this.userProgress.lastUpdate
+    },
+    userProgressStartedDate() {
+      if (!this.userProgress) return null
+      return this.userProgress.startedAt
+    },
+    userProgressFinishedDate() {
+      if (!this.userProgress) return null
+      return this.userProgress.finishedAt
     },
     itemIsFinished() {
       if (this.booksInSeries) return this.seriesIsFinished
@@ -760,11 +788,11 @@ export default {
     },
     showEditModalFiles() {
       // More menu func
-      this.store.commit('showEditModalOnTab', { libraryItem: this.libraryItem, tab: 'files' })
+      this.$emit('edit', this.libraryItem, 'files')
     },
     showEditModalMatch() {
       // More menu func
-      this.store.commit('showEditModalOnTab', { libraryItem: this.libraryItem, tab: 'match' })
+      this.$emit('edit', this.libraryItem, 'match')
     },
     sendToDevice(deviceName) {
       // More menu func

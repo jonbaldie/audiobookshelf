@@ -2,7 +2,7 @@ const axios = require('axios')
 const Logger = require('../Logger')
 
 class FantLab {
-  #responseTimeout = 30000
+  #responseTimeout = 10000
   // 7 - other
   // 11 - essay
   // 12 - article
@@ -48,13 +48,11 @@ class FantLab {
         return res.data || []
       })
       .catch((error) => {
-        Logger.error('[FantLab] search error', error)
+        Logger.error('[FantLab] search error', error.message)
         return []
       })
 
-    return Promise.all(items.map(async (item) => await this.getWork(item, timeout))).then((resArray) => {
-      return resArray.filter((res) => res)
-    })
+    return Promise.all(items.map(async (item) => await this.getWork(item, timeout))).then((resArray) => resArray.filter(Boolean))
   }
 
   /**
@@ -79,9 +77,13 @@ class FantLab {
         return resp.data || null
       })
       .catch((error) => {
-        Logger.error(`[FantLab] work info request for url "${url}" error`, error)
+        Logger.error(`[FantLab] work info request for url "${url}" error`, error.message)
         return null
       })
+
+    if (!bookData) {
+      return null
+    }
 
     return this.cleanBookData(bookData, timeout)
   }
@@ -191,7 +193,7 @@ class FantLab {
         return resp.data || null
       })
       .catch((error) => {
-        Logger.error(`[FantLab] search cover from edition with url "${url}" error`, error)
+        Logger.error(`[FantLab] search cover from edition with url "${url}" error`, error.message)
         return null
       })
 

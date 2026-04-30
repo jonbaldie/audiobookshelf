@@ -85,9 +85,6 @@ export default {
         this.$emit('input', val)
       }
     },
-    userToken() {
-      return this.$store.getters['user/getToken']
-    },
     wrapperClass() {
       var classes = []
       if (this.disabled) classes.push('bg-black-300')
@@ -290,7 +287,7 @@ export default {
       })
     },
     insertNewItem(item) {
-      this.selected.push(item)
+      if (!this.selected.find((i) => i.name === item.name)) this.selected.push(item)
       this.$emit('input', this.selected)
       this.$emit('newItem', item)
       this.textInput = null

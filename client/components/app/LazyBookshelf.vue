@@ -232,11 +232,11 @@ export default {
     clearFilter() {
       this.$store.dispatch('user/updateUserSettings', { filterBy: 'all' })
     },
-    editEntity(entity) {
+    editEntity(entity, tab = 'details') {
       if (this.entityName === 'items' || this.entityName === 'series-books') {
         const bookIds = this.entities.map((e) => e.id)
         this.$store.commit('setBookshelfBookIds', bookIds)
-        this.$store.commit('showEditModal', entity)
+        this.$store.commit('showEditModalOnTab', { libraryItem: entity, tab: tab || 'details' })
       } else if (this.entityName === 'collections') {
         this.$store.commit('globals/setEditCollection', entity)
       } else if (this.entityName === 'playlists') {
@@ -778,10 +778,6 @@ export default {
     windowResize() {
       this.executeRebuild()
     },
-    socketInit() {
-      // Server settings are set on socket init
-      this.executeRebuild()
-    },
     initListeners() {
       window.addEventListener('resize', this.windowResize)
 
@@ -794,7 +790,6 @@ export default {
       })
 
       this.$eventBus.$on('bookshelf_clear_selection', this.clearSelectedEntities)
-      this.$eventBus.$on('socket_init', this.socketInit)
       this.$eventBus.$on('user-settings', this.settingsUpdated)
 
       if (this.$root.socket) {
@@ -826,7 +821,6 @@ export default {
       }
 
       this.$eventBus.$off('bookshelf_clear_selection', this.clearSelectedEntities)
-      this.$eventBus.$off('socket_init', this.socketInit)
       this.$eventBus.$off('user-settings', this.settingsUpdated)
 
       if (this.$root.socket) {

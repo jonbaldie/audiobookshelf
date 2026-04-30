@@ -186,6 +186,8 @@ module.exports = {
       mediaWhere['$series.id$'] = null
     } else if (group === 'abridged') {
       mediaWhere['abridged'] = true
+    } else if (group === 'explicit') {
+      mediaWhere['explicit'] = true
     } else if (['genres', 'tags', 'narrators'].includes(group)) {
       mediaWhere[group] = Sequelize.where(Sequelize.literal(`(SELECT count(*) FROM json_each(${group}) WHERE json_valid(${group}) AND json_each.value = :filterValue)`), {
         [Sequelize.Op.gte]: 1
@@ -234,7 +236,7 @@ module.exports = {
     } else if (group === 'publishedDecades') {
       const startYear = parseInt(value)
       const endYear = parseInt(value, 10) + 9
-      mediaWhere = Sequelize.where(Sequelize.literal('CAST(`book`.`publishedYear` AS INTEGER)'), {
+      mediaWhere = Sequelize.where(Sequelize.literal('CAST(publishedYear AS INTEGER)'), {
         [Sequelize.Op.between]: [startYear, endYear]
       })
     }
@@ -251,6 +253,15 @@ module.exports = {
    */
   getOrder(sortBy, sortDesc, collapseseries) {
     const dir = sortDesc ? 'DESC' : 'ASC'
+
+    const getTitleOrder = () => {
+      if (global.ServerSettings.sortingIgnorePrefix) {
+        return [Sequelize.literal('`libraryItem`.`titleIgnorePrefix` COLLATE NOCASE'), dir]
+      } else {
+        return [Sequelize.literal('`libraryItem`.`title` COLLATE NOCASE'), dir]
+      }
+    }
+
     if (sortBy === 'addedAt') {
       return [[Sequelize.literal('libraryItem.createdAt'), dir]]
     } else if (sortBy === 'size') {
@@ -264,24 +275,25 @@ module.exports = {
     } else if (sortBy === 'media.metadata.publishedYear') {
       return [[Sequelize.literal(`CAST(\`book\`.\`publishedYear\` AS INTEGER)`), dir]]
     } else if (sortBy === 'media.metadata.authorNameLF') {
-      return [[Sequelize.literal('`libraryItem`.`authorNamesLastFirst` COLLATE NOCASE'), dir]]
+      // Sort by author name last first, secondary sort by title
+      return [[Sequelize.literal('`libraryItem`.`authorNamesLastFirst` COLLATE NOCASE'), dir], getTitleOrder()]
     } else if (sortBy === 'media.metadata.authorName') {
-      return [[Sequelize.literal('`libraryItem`.`authorNamesFirstLast` COLLATE NOCASE'), dir]]
+      // Sort by author name first last, secondary sort by title
+      return [[Sequelize.literal('`libraryItem`.`authorNamesFirstLast` COLLATE NOCASE'), dir], getTitleOrder()]
     } else if (sortBy === 'media.metadata.title') {
       if (collapseseries) {
         return [[Sequelize.literal('display_title COLLATE NOCASE'), dir]]
       }
-
-      if (global.ServerSettings.sortingIgnorePrefix) {
-        return [[Sequelize.literal('`libraryItem`.`titleIgnorePrefix` COLLATE NOCASE'), dir]]
-      } else {
-        return [[Sequelize.literal('`libraryItem`.`title` COLLATE NOCASE'), dir]]
-      }
+      return [getTitleOrder()]
     } else if (sortBy === 'sequence') {
       const nullDir = sortDesc ? 'DESC NULLS FIRST' : 'ASC NULLS LAST'
       return [[Sequelize.literal(`CAST(\`series.bookSeries.sequence\` AS FLOAT) ${nullDir}`)]]
     } else if (sortBy === 'progress') {
-      return [[Sequelize.literal('mediaProgresses.updatedAt'), dir]]
+      return [[Sequelize.literal(`mediaProgresses.updatedAt ${dir} NULLS LAST`)]]
+    } else if (sortBy === 'progress.createdAt') {
+      return [[Sequelize.literal(`mediaProgresses.createdAt ${dir} NULLS LAST`)]]
+    } else if (sortBy === 'progress.finishedAt') {
+      return [[Sequelize.literal(`mediaProgresses.finishedAt ${dir} NULLS LAST`)]]
     } else if (sortBy === 'random') {
       return [Database.sequelize.random()]
     }
@@ -389,9 +401,6 @@ module.exports = {
       collapseseries = false
     }
     if (filterGroup !== 'series' && sortBy === 'sequence') {
-      sortBy = 'media.metadata.title'
-    }
-    if (filterGroup !== 'progress' && sortBy === 'progress') {
       sortBy = 'media.metadata.title'
     }
     const includeRSSFeed = include.includes('rssfeed')
@@ -514,7 +523,7 @@ module.exports = {
       }
       bookIncludes.push({
         model: Database.mediaProgressModel,
-        attributes: ['id', 'isFinished', 'currentTime', 'ebookProgress', 'updatedAt'],
+        attributes: ['id', 'isFinished', 'currentTime', 'ebookProgress', 'updatedAt', 'createdAt', 'finishedAt'],
         where: mediaProgressWhere,
         required: false
       })
@@ -522,6 +531,18 @@ module.exports = {
       libraryItemWhere['createdAt'] = {
         [Sequelize.Op.gte]: new Date(new Date() - 60 * 24 * 60 * 60 * 1000) // 60 days ago
       }
+    }
+
+    // When sorting by progress but not filtering by progress, include media progresses
+    if (filterGroup !== 'progress' && ['progress.createdAt', 'progress.finishedAt', 'progress'].includes(sortBy)) {
+      bookIncludes.push({
+        model: Database.mediaProgressModel,
+        attributes: ['id', 'isFinished', 'currentTime', 'ebookProgress', 'updatedAt', 'createdAt', 'finishedAt'],
+        where: {
+          userId: user.id
+        },
+        required: false
+      })
     }
 
     let { mediaWhere, replacements } = this.getMediaGroupQuery(filterGroup, filterValue)
@@ -867,28 +888,79 @@ module.exports = {
       })
     }
 
-    // Step 2: Get books not started and not in a series OR is the first book of a series not started (ordered randomly)
-    const { rows: books, count } = await Database.bookModel.findAndCountAll({
-      where: [
-        {
-          '$mediaProgresses.isFinished$': {
-            [Sequelize.Op.or]: [null, 0]
-          },
-          '$mediaProgresses.currentTime$': {
-            [Sequelize.Op.or]: [null, 0]
-          },
-          [Sequelize.Op.or]: [
-            Sequelize.where(Sequelize.literal(`(SELECT COUNT(*) FROM bookSeries bs where bs.bookId = book.id)`), 0),
-            {
-              id: {
-                [Sequelize.Op.in]: booksFromSeriesToInclude
-              }
-            }
-          ]
+    const discoverWhere = [
+      {
+        '$mediaProgresses.isFinished$': {
+          [Sequelize.Op.or]: [null, 0]
         },
-        ...userPermissionBookWhere.bookWhere
-      ],
+        '$mediaProgresses.currentTime$': {
+          [Sequelize.Op.or]: [null, 0]
+        },
+        [Sequelize.Op.or]: [
+          Sequelize.where(Sequelize.literal(`(SELECT COUNT(*) FROM bookSeries bs where bs.bookId = book.id)`), 0),
+          {
+            id: {
+              [Sequelize.Op.in]: booksFromSeriesToInclude
+            }
+          }
+        ]
+      },
+      ...userPermissionBookWhere.bookWhere
+    ]
+
+    const baseDiscoverInclude = [
+      {
+        model: Database.libraryItemModel,
+        where: {
+          libraryId
+        }
+      },
+      {
+        model: Database.mediaProgressModel,
+        where: {
+          userId: user.id
+        },
+        required: false
+      }
+    ]
+
+    // Step 2a: Count with lightweight includes only
+    const count = await Database.bookModel.count({
+      where: discoverWhere,
       replacements: userPermissionBookWhere.replacements,
+      include: baseDiscoverInclude,
+      distinct: true,
+      col: 'id',
+      subQuery: false
+    })
+
+    // Step 2b: Select random IDs with lightweight includes only
+    const randomSelection = await Database.bookModel.findAll({
+      attributes: ['id'],
+      where: discoverWhere,
+      replacements: userPermissionBookWhere.replacements,
+      include: baseDiscoverInclude,
+      subQuery: false,
+      distinct: true,
+      limit,
+      order: Database.sequelize.random()
+    })
+
+    const selectedIds = randomSelection.map((b) => b.id).filter(Boolean)
+    if (!selectedIds.length) {
+      return {
+        libraryItems: [],
+        count
+      }
+    }
+
+    // Step 2c: Hydrate selected IDs with full metadata for API response
+    const books = await Database.bookModel.findAll({
+      where: {
+        id: {
+          [Sequelize.Op.in]: selectedIds
+        }
+      },
       include: [
         {
           model: Database.libraryItemModel,
@@ -896,13 +968,6 @@ module.exports = {
             libraryId
           },
           include: libraryItemIncludes
-        },
-        {
-          model: Database.mediaProgressModel,
-          where: {
-            userId: user.id
-          },
-          required: false
         },
         {
           model: Database.bookAuthorModel,
@@ -921,14 +986,14 @@ module.exports = {
           separate: true
         }
       ],
-      subQuery: false,
-      distinct: true,
-      limit,
-      order: Database.sequelize.random()
+      subQuery: false
     })
 
+    const booksById = new Map(books.map((b) => [b.id, b]))
+    const orderedBooks = selectedIds.map((id) => booksById.get(id)).filter(Boolean)
+
     // Step 3: Map books to library items
-    const libraryItems = books.map((bookExpanded) => {
+    const libraryItems = orderedBooks.map((bookExpanded) => {
       const libraryItem = bookExpanded.libraryItem
       const book = bookExpanded
       delete book.libraryItem

@@ -109,7 +109,7 @@ function getIno(path) {
     .stat(path, { bigint: true })
     .then((data) => String(data.ino))
     .catch((err) => {
-      Logger.error('[Utils] Failed to get ino for path', path, err)
+      Logger.warn(`[Utils] Failed to get ino for path "${path}"`, err)
       return null
     })
 }
@@ -476,7 +476,7 @@ module.exports.getWindowsDrives = async () => {
     return []
   }
   return new Promise((resolve, reject) => {
-    exec('wmic logicaldisk get name', async (error, stdout, stderr) => {
+    exec('powershell -Command "(Get-PSDrive -PSProvider FileSystem).Name"', async (error, stdout, stderr) => {
       if (error) {
         reject(error)
         return
@@ -485,10 +485,9 @@ module.exports.getWindowsDrives = async () => {
         ?.split(/\r?\n/)
         .map((line) => line.trim())
         .filter((line) => line)
-        .slice(1)
       const validDrives = []
       for (const drive of drives) {
-        let drivepath = drive + '/'
+        let drivepath = drive + ':/'
         if (await fs.pathExists(drivepath)) {
           validDrives.push(drivepath)
         } else {

@@ -94,6 +94,9 @@ export default {
     userIsAdminOrUp() {
       return this.$store.getters['user/getIsAdminOrUp']
     },
+    userCanAccessExplicitContent() {
+      return this.$store.getters['user/getUserCanAccessExplicitContent']
+    },
     libraryMediaType() {
       return this.$store.getters['libraries/getCurrentLibraryMediaType']
     },
@@ -239,6 +242,15 @@ export default {
           sublist: false
         }
       ]
+
+      if (this.userCanAccessExplicitContent) {
+        items.push({
+          text: this.$strings.LabelExplicit,
+          value: 'explicit',
+          sublist: false
+        })
+      }
+
       if (this.userIsAdminOrUp) {
         items.push({
           text: this.$strings.LabelShareOpen,
@@ -249,7 +261,7 @@ export default {
       return items
     },
     podcastItems() {
-      return [
+      const items = [
         {
           text: this.$strings.LabelAll,
           value: 'all'
@@ -276,8 +288,23 @@ export default {
           text: this.$strings.ButtonIssues,
           value: 'issues',
           sublist: false
+        },
+        {
+          text: this.$strings.LabelRSSFeedOpen,
+          value: 'feed-open',
+          sublist: false
         }
       ]
+
+      if (this.userCanAccessExplicitContent) {
+        items.push({
+          text: this.$strings.LabelExplicit,
+          value: 'explicit',
+          sublist: false
+        })
+      }
+
+      return items
     },
     selectItems() {
       if (this.isSeries) return this.seriesItems
@@ -311,6 +338,18 @@ export default {
             const series = this.series.find((se) => se.id == decoded)
             if (series) filterValue = series.name
           }
+        } else if (parts[0] === 'progress') {
+          const item = this.progress.find((p) => p.id == decoded)
+          if (item) filterValue = item.name
+        } else if (parts[0] === 'tracks') {
+          const item = this.tracks.find((t) => t.id == decoded)
+          if (item) filterValue = item.name
+        } else if (parts[0] === 'ebooks') {
+          const item = this.ebooks.find((e) => e.id == decoded)
+          if (item) filterValue = item.name
+        } else if (parts[0] === 'missing') {
+          const item = this.missing.find((m) => m.id == decoded)
+          if (item) filterValue = item.name
         } else {
           filterValue = decoded
         }

@@ -4,6 +4,7 @@ const Logger = require('../Logger')
 const Database = require('../Database')
 const { toNumber, isUUID } = require('../utils/index')
 const { getAudioMimeTypeFromExtname, encodeUriPath } = require('../utils/fileUtils')
+const { PlayMethod } = require('../utils/constants')
 
 const ShareManager = require('../managers/ShareManager')
 
@@ -57,26 +58,24 @@ class SessionController {
     }
 
     let where = null
-    const include = [
-      {
-        model: Database.models.device
-      }
-    ]
 
     if (userId) {
       where = {
         userId
       }
-    } else {
-      include.push({
-        model: Database.userModel,
-        attributes: ['id', 'username']
-      })
     }
 
     const { rows, count } = await Database.playbackSessionModel.findAndCountAll({
       where,
-      include,
+      include: [
+        {
+          model: Database.deviceModel
+        },
+        {
+          model: Database.userModel,
+          attributes: ['id', 'username']
+        }
+      ],
       order: [[orderKey, orderDesc]],
       limit: itemsPerPage,
       offset: itemsPerPage * page
@@ -290,10 +289,27 @@ class SessionController {
       return res.sendStatus(404)
     }
 
-    const audioTrack = playbackSession.audioTracks.find((t) => t.index === audioTrackIndex)
+    let audioTrack = playbackSession.audioTracks.find((t) => toNumber(t.index, 1) === audioTrackIndex)
+
+    // Support clients passing 0 or 1 for podcast episode audio track index (handles old episodes pre-v2.21.0 having null index)
+    if (!audioTrack && playbackSession.mediaType === 'podcast' && audioTrackIndex === 0) {
+      audioTrack = playbackSession.audioTracks[0]
+    }
     if (!audioTrack) {
       Logger.error(`[SessionController] Unable to find audio track with index=${audioTrackIndex}`)
       return res.sendStatus(404)
+    }
+
+    // Redirect transcode requests to the HLS router
+    // Handles bug introduced in android v0.10.0-beta where transcode requests are made to this endpoint
+    if (playbackSession.playMethod === PlayMethod.TRANSCODE && audioTrack.contentUrl) {
+      Logger.debug(`[SessionController] Redirecting transcode request to "${audioTrack.contentUrl}"`)
+      return res.redirect(audioTrack.contentUrl)
+    }
+
+    if (!audioTrack.metadata?.path) {
+      Logger.error(`[SessionController] Invalid audio track "${audioTrack.index}" for session "${req.params.id}"`)
+      return res.sendStatus(500)
     }
 
     const user = await Database.userModel.getUserById(playbackSession.userId)
@@ -323,9 +339,9 @@ class SessionController {
     var playbackSession = this.playbackSessionManager.getSession(req.params.id)
     if (!playbackSession) return res.sendStatus(404)
 
-    if (playbackSession.userId !== req.user.id) {
-      Logger.error(`[SessionController] User "${req.user.username}" attempting to access session belonging to another user "${req.params.id}"`)
-      return res.sendStatus(404)
+    if (playbackSession.userId !== req.user.id && !req.user.isAdminOrUp) {
+      Logger.error(`[SessionController] Non-admin user "${req.user.username}" attempting to access session belonging to another user "${req.params.id}"`)
+      return res.sendStatus(403)
     }
 
     req.playbackSession = playbackSession

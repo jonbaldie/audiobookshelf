@@ -1,9 +1,11 @@
 const uuidv4 = require('uuid').v4
 const sequelize = require('sequelize')
+const { LRUCache } = require('lru-cache')
+
 const Logger = require('../Logger')
 const SocketAuthority = require('../SocketAuthority')
 const { isNullOrNaN } = require('../utils')
-const { LRUCache } = require('lru-cache')
+const TokenManager = require('../auth/TokenManager')
 
 class UserCache {
   constructor() {
@@ -190,7 +192,7 @@ class User extends Model {
   static async createRootUser(username, pash, auth) {
     const userId = uuidv4()
 
-    const token = await auth.generateAccessToken({ id: userId, username })
+    const token = auth.generateAccessToken({ id: userId, username })
 
     const newUser = {
       id: userId,
@@ -209,18 +211,110 @@ class User extends Model {
   }
 
   /**
+   * Finds an existing user by OpenID subject identifier, or by email/username based on server settings
+   * Returns null if no user is found
+   *
+   * @param {Object} userinfo
+   * @returns {Promise<User|{error: string}>}
+   */
+  static async findUserFromOpenIdUserInfo(userinfo) {
+    let user = await this.getUserByOpenIDSub(userinfo.sub)
+
+    // Matched by sub
+    if (user) {
+      Logger.debug(`[User] openid: User found by sub "${userinfo.sub}"`)
+      return user
+    }
+
+    // Match existing user by email
+    if (global.ServerSettings.authOpenIDMatchExistingBy === 'email') {
+      if (userinfo.email) {
+        // Only disallow when email_verified explicitly set to false (allow both if not set or true)
+        if (userinfo.email_verified === false) {
+          Logger.warn(`[User] openid: User not found and email "${userinfo.email}" is not verified`)
+          return {
+            error: 'Email not verified'
+          }
+        } else {
+          Logger.info(`[User] openid: User not found, checking existing with email "${userinfo.email}"`)
+          user = await this.getUserByEmail(userinfo.email)
+
+          if (user?.authOpenIDSub) {
+            Logger.warn(`[User] openid: User found with email "${userinfo.email}" but is already matched with sub "${user.authOpenIDSub}"`)
+            // User is linked to a different OpenID subject; do not proceed.
+            return {
+              error: 'User already linked to a different OpenID subject'
+            }
+          }
+        }
+      } else {
+        Logger.warn(`[User] openid: User not found and no email in userinfo`)
+        // We deny login, because if the admin whishes to match email, it makes sense to require it
+        return {
+          error: 'No email in userinfo'
+        }
+      }
+    }
+    // Match existing user by username
+    else if (global.ServerSettings.authOpenIDMatchExistingBy === 'username') {
+      let username
+
+      if (userinfo.preferred_username) {
+        Logger.info(`[User] openid: User not found, checking existing with userinfo.preferred_username "${userinfo.preferred_username}"`)
+        username = userinfo.preferred_username
+      } else if (userinfo.username) {
+        Logger.info(`[User] openid: User not found, checking existing with userinfo.username "${userinfo.username}"`)
+        username = userinfo.username
+      } else {
+        Logger.warn(`[User] openid: User not found and neither preferred_username nor username in userinfo`)
+        return {
+          error: 'No username in userinfo'
+        }
+      }
+
+      user = await this.getUserByUsername(username)
+
+      if (user?.authOpenIDSub) {
+        Logger.warn(`[User] openid: User found with username "${username}" but is already matched with sub "${user.authOpenIDSub}"`)
+        // User is linked to a different OpenID subject; do not proceed.
+        return {
+          error: 'User already linked to a different OpenID subject'
+        }
+      }
+    }
+
+    if (!user) {
+      return null
+    }
+
+    // Found existing user via email or username
+    if (!user.isActive) {
+      Logger.warn(`[User] openid: User found but is not active`)
+      return user
+    }
+
+    // Update user with OpenID sub
+    if (!user.extraData) user.extraData = {}
+    user.extraData.authOpenIDSub = userinfo.sub
+    user.changed('extraData', true)
+    await user.save()
+
+    Logger.debug(`[User] openid: User found by email/username`)
+    return user
+  }
+
+  /**
    * Create user from openid userinfo
    * @param {Object} userinfo
-   * @param {import('../Auth')} auth
    * @returns {Promise<User>}
    */
-  static async createUserFromOpenIdUserInfo(userinfo, auth) {
+  static async createUserFromOpenIdUserInfo(userinfo) {
     const userId = uuidv4()
     // TODO: Ensure username is unique?
     const username = userinfo.preferred_username || userinfo.name || userinfo.sub
     const email = userinfo.email && userinfo.email_verified ? userinfo.email : null
 
-    const token = await auth.generateAccessToken({ id: userId, username })
+    const token = TokenManager.generateAccessToken({ id: userId, username })
 
     const newUser = {
       id: userId,
@@ -520,7 +614,11 @@ class User extends Model {
       username: this.username,
       email: this.email,
       type: this.type,
+      // TODO: Old non-expiring token
       token: this.type === 'root' && hideRootToken ? '' : this.token,
+      // TODO: Temporary flag not saved in db that is set in Auth.js jwtAuthCheck
+      // Necessary to detect apps using old tokens that no longer match the old token stored on the user
+      isOldToken: this.isOldToken,
       mediaProgress: this.mediaProgresses?.map((mp) => mp.getOldMediaProgress()) || [],
       seriesHideFromContinueListening: [...seriesHideFromContinueListening],
       bookmarks: this.bookmarks?.map((b) => ({ ...b })) || [],
@@ -684,7 +782,14 @@ class User extends Model {
           error: 'Library item not found',
           statusCode: 404
         }
+      } else if (libraryItem.mediaType !== 'book') {
+        Logger.error(`[User] createUpdateMediaProgress: library item ${progressPayload.libraryItemId} is not a book`)
+        return {
+          error: 'Library item is not a book',
+          statusCode: 400
+        }
       }
+
       mediaItemId = libraryItem.media.id
       mediaProgress = libraryItem.media.mediaProgresses?.[0]
     }

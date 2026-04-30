@@ -31,10 +31,12 @@ class CronManager {
   }
 
   /**
-   * Initialize open session cleanup cron
+   * Initialize open session & auth session cleanup cron
    * Runs every day at 00:30
    * Closes open share sessions that have not been updated in 24 hours
    * Closes open playback sessions that have not been updated in 36 hours
+   * Cleans up expired auth sessions
+   * Deactivates expired api keys
    * TODO: Clients should re-open the session if it is closed so that stale sessions can be closed sooner
    */
   initOpenSessionCleanupCron() {
@@ -42,6 +44,8 @@ class CronManager {
       Logger.debug('[CronManager] Open session cleanup cron executing')
       ShareManager.closeStaleOpenShareSessions()
       await this.playbackSessionManager.closeStaleOpenSessions()
+      await Database.cleanupExpiredSessions()
+      await Database.deactivateExpiredApiKeys()
     })
   }
 
@@ -149,6 +153,11 @@ class CronManager {
 
   startPodcastCron(expression, libraryItemIds) {
     try {
+      if (!cron.validate(expression)) {
+        Logger.error(`[CronManager] Invalid auto download schedule cron expression "${expression}" - not starting podcast episode check cron`)
+        return
+      }
+
       Logger.debug(`[CronManager] Scheduling podcast episode check cron "${expression}" for ${libraryItemIds.length} item(s)`)
       const task = cron.schedule(expression, () => {
         if (this.podcastCronExpressionsExecuting.includes(expression)) {
@@ -163,7 +172,7 @@ class CronManager {
         task
       })
     } catch (error) {
-      Logger.error(`[PodcastManager] Failed to schedule podcast cron ${this.serverSettings.podcastEpisodeSchedule}`, error)
+      Logger.error(`[PodcastManager] Failed to schedule podcast cron ${expression}`, error)
     }
   }
 

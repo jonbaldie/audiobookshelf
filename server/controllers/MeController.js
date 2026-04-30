@@ -63,12 +63,18 @@ class MeController {
    * @param {Response} res
    */
   async getItemListeningSessions(req, res) {
-    const libraryItem = await Database.libraryItemModel.findByPk(req.params.libraryItemId)
+    const libraryItem = await Database.libraryItemModel.getExpandedById(req.params.libraryItemId)
     const episode = await Database.podcastEpisodeModel.findByPk(req.params.episodeId)
 
     if (!libraryItem || (libraryItem.isPodcast && !episode)) {
       Logger.error(`[MeController] Media item not found for library item id "${req.params.libraryItemId}"`)
       return res.sendStatus(404)
+    }
+
+    // Check if user has access to this library item
+    if (!req.user.checkCanAccessLibraryItem(libraryItem)) {
+      Logger.error(`[MeController] User "${req.user.username}" attempted to access listening sessions for library item "${req.params.libraryItemId}" without access`)
+      return res.sendStatus(403)
     }
 
     const mediaItemId = episode?.id || libraryItem.mediaId
@@ -125,6 +131,13 @@ class MeController {
    * @param {Response} res
    */
   async removeMediaProgress(req, res) {
+    // Verify the media progress belongs to the current user
+    const mediaProgress = req.user.mediaProgresses.find((mp) => mp.id === req.params.id)
+    if (!mediaProgress) {
+      Logger.error(`[MeController] Media progress not found or does not belong to user "${req.user.username}"`)
+      return res.sendStatus(404)
+    }
+
     await Database.mediaProgressModel.removeById(req.params.id)
     req.user.mediaProgresses = req.user.mediaProgresses.filter((mp) => mp.id !== req.params.id)
 
@@ -192,7 +205,16 @@ class MeController {
    * @param {Response} res
    */
   async createBookmark(req, res) {
-    if (!(await Database.libraryItemModel.checkExistsById(req.params.id))) return res.sendStatus(404)
+    const libraryItem = await Database.libraryItemModel.getExpandedById(req.params.id)
+    if (!libraryItem) {
+      return res.sendStatus(404)
+    }
+
+    // Check if user has access to this library item
+    if (!req.user.checkCanAccessLibraryItem(libraryItem)) {
+      Logger.error(`[MeController] User "${req.user.username}" attempted to create bookmark for library item "${req.params.id}" without access`)
+      return res.sendStatus(403)
+    }
 
     const { time, title } = req.body
     if (isNullOrNaN(time)) {
@@ -216,7 +238,16 @@ class MeController {
    * @param {Response} res
    */
   async updateBookmark(req, res) {
-    if (!(await Database.libraryItemModel.checkExistsById(req.params.id))) return res.sendStatus(404)
+    const libraryItem = await Database.libraryItemModel.getExpandedById(req.params.id)
+    if (!libraryItem) {
+      return res.sendStatus(404)
+    }
+
+    // Check if user has access to this library item
+    if (!req.user.checkCanAccessLibraryItem(libraryItem)) {
+      Logger.error(`[MeController] User "${req.user.username}" attempted to update bookmark for library item "${req.params.id}" without access`)
+      return res.sendStatus(403)
+    }
 
     const { time, title } = req.body
     if (isNullOrNaN(time)) {
@@ -245,7 +276,16 @@ class MeController {
    * @param {Response} res
    */
   async removeBookmark(req, res) {
-    if (!(await Database.libraryItemModel.checkExistsById(req.params.id))) return res.sendStatus(404)
+    const libraryItem = await Database.libraryItemModel.getExpandedById(req.params.id)
+    if (!libraryItem) {
+      return res.sendStatus(404)
+    }
+
+    // Check if user has access to this library item
+    if (!req.user.checkCanAccessLibraryItem(libraryItem)) {
+      Logger.error(`[MeController] User "${req.user.username}" attempted to remove bookmark for library item "${req.params.id}" without access`)
+      return res.sendStatus(403)
+    }
 
     const time = Number(req.params.time)
     if (isNaN(time)) {
@@ -273,12 +313,24 @@ class MeController {
    * @param {RequestWithUser} req
    * @param {Response} res
    */
-  updatePassword(req, res) {
+  async updatePassword(req, res) {
     if (req.user.isGuest) {
       Logger.error(`[MeController] Guest user "${req.user.username}" attempted to change password`)
-      return res.sendStatus(500)
+      return res.sendStatus(403)
     }
-    this.auth.userChangePassword(req, res)
+
+    const { password, newPassword } = req.body
+    if ((typeof password !== 'string' && password !== null) || (typeof newPassword !== 'string' && newPassword !== null)) {
+      return res.status(400).send('Missing or invalid password or new password')
+    }
+
+    const result = await this.auth.localAuthStrategy.changePassword(req.user, password, newPassword)
+
+    if (result.error) {
+      return res.status(400).send(result.error)
+    }
+
+    res.sendStatus(200)
   }
 
   /**
@@ -438,7 +490,7 @@ class MeController {
     if (updated) {
       await Database.updateSetting(Database.emailSettings)
       SocketAuthority.clientEmitter(req.user.id, 'ereader-devices-updated', {
-        ereaderDevices: Database.emailSettings.ereaderDevices
+        ereaderDevices: Database.emailSettings.getEReaderDevices(req.user)
       })
     }
     res.json({
