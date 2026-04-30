@@ -11,6 +11,8 @@ const OidcAuthStrategy = require('./auth/OidcAuthStrategy')
 
 const RateLimiterFactory = require('./utils/rateLimiterFactory')
 const { escapeRegExp } = require('./utils')
+const TokenBlacklist = require('./auth/TokenBlacklist')
+const jwt = require('./libs/jsonwebtoken')
 
 /**
  * @class Class for handling all the authentication related functionality.
@@ -126,7 +128,8 @@ class Auth {
           jwtFromRequest: ExtractJwt.fromExtractors([ExtractJwt.fromAuthHeaderAsBearerToken(), ExtractJwt.fromUrlQueryParameter('token')]),
           secretOrKey: TokenManager.TokenSecret,
           // Handle expiration manaully in order to disable api keys that are expired
-          ignoreExpiration: true
+          ignoreExpiration: true,
+          passReqToCallback: true
         },
         this.tokenManager.jwtAuthCheck.bind(this)
       )
@@ -473,8 +476,25 @@ class Auth {
 
     // Logout route
     router.post('/logout', async (req, res) => {
-      // Refresh token be alternatively be sent in the header
+      // Refresh token can alternatively be sent in the header
       const refreshToken = req.cookies.refresh_token || req.headers['x-refresh-token']
+
+      // Extract the current access token and add it to the blacklist
+      const accessToken = req.headers['authorization']?.replace(/^Bearer\s+/i, '') || req.query?.token
+      if (accessToken) {
+        try {
+          const decoded = jwt.decode(accessToken)
+          if (decoded?.exp) {
+            const expiresAt = new Date(decoded.exp * 1000)
+            TokenBlacklist.add(accessToken, expiresAt)
+            Logger.debug(`[Auth] logout: access token added to blacklist, expiresAt=${expiresAt.toISOString()}`)
+          } else {
+            TokenBlacklist.add(accessToken, new Date(Date.now() + this.tokenManager.AccessTokenExpiry * 1000))
+          }
+        } catch (e) {
+          Logger.error(`[Auth] logout: error decoding access token for blacklist: ${e.message}`)
+        }
+      }
 
       // Clear refresh token cookie
       res.clearCookie('refresh_token', {

@@ -1,7 +1,9 @@
 const { Op } = require('sequelize')
+const ExtractJwt = require('passport-jwt').ExtractJwt
 
 const Database = require('../Database')
 const Logger = require('../Logger')
+const TokenBlacklist = require('./TokenBlacklist')
 
 const requestIp = require('../libs/requestIp')
 const jwt = require('../libs/jsonwebtoken')
@@ -75,6 +77,9 @@ class TokenManager {
    */
   static validateAccessToken(token) {
     try {
+      if (TokenBlacklist.isBlacklisted(token)) {
+        return null
+      }
       return jwt.verify(token, TokenManager.TokenSecret)
     } catch (err) {
       return null
@@ -210,10 +215,18 @@ class TokenManager {
   /**
    * Check if the jwt is valid
    *
+   * @param {import('express').Request} req
    * @param {Object} jwt_payload
    * @param {Function} done - passportjs callback
    */
-  async jwtAuthCheck(jwt_payload, done) {
+  async jwtAuthCheck(req, jwt_payload, done) {
+    // Check if token has been revoked via logout
+    const rawToken = ExtractJwt.fromAuthHeaderAsBearerToken()(req) || req.query?.token
+    if (rawToken && TokenBlacklist.isBlacklisted(rawToken)) {
+      done(null, null)
+      return
+    }
+
     if (jwt_payload.type === 'api') {
       // Api key based authentication
       const apiKey = await Database.apiKeyModel.getById(jwt_payload.keyId)
