@@ -399,14 +399,21 @@ export default class LocalAudioPlayer extends EventEmitter {
   getCurrentTime() {
     var currentTrackOffset = this.currentTrack.startOffset || 0
     if (!this.player) return 0
-    
+
+    if (this.enableSmartSpeed) {
+      return this.timeMapper.audioToWallClock((currentTrackOffset + this.player.currentTime) * 1000) / 1000
+    }
     return currentTrackOffset + this.player.currentTime
   }
 
   getDuration() {
     if (!this.audioTracks.length) return 0
     var lastTrack = this.audioTracks[this.audioTracks.length - 1]
-    return lastTrack.startOffset + lastTrack.duration
+    const duration = lastTrack.startOffset + lastTrack.duration
+    if (this.enableSmartSpeed) {
+      return this.timeMapper.audioToWallClock(duration * 1000) / 1000
+    }
+    return duration
   }
 
   setPlaybackRate(playbackRate) {
@@ -434,6 +441,10 @@ export default class LocalAudioPlayer extends EventEmitter {
     if (!this.player) return
 
     var mappedTime = time
+
+    if (this.enableSmartSpeed) {
+      mappedTime = this.timeMapper.wallClockToAudio(time * 1000) / 1000
+    }
 
     if (this.silenceDetectorNode) {
       this.silenceDetectorNode.port.postMessage({ type: 'reset' })

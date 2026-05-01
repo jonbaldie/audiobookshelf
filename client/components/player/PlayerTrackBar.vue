@@ -189,7 +189,7 @@ export default {
         this.$refs.hoverTimestampArrow.style.left = posLeft + 'px'
       }
       if (this.$refs.hoverTimestampText) {
-        var hoverText = this.$secondsToTimestamp(progressTime / this._playbackRate)
+        var hoverText = this.$secondsToTimestamp(progressTime)
 
         var chapter = this.chapters.find((chapter) => chapter.start <= totalTime && totalTime < chapter.end)
         if (chapter && chapter.title) {
