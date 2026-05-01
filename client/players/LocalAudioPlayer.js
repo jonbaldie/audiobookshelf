@@ -21,6 +21,10 @@ export default class LocalAudioPlayer extends EventEmitter {
 
     this.playableMimeTypes = []
 
+    this.audioContext = null
+    this.audioSourceNode = null
+    this.usingWebAudio = false
+
     this.initialize()
   }
 
@@ -67,6 +71,25 @@ export default class LocalAudioPlayer extends EventEmitter {
       if (canPlay) this.playableMimeTypes.push(mt)
     })
     console.log(`[LocalPlayer] Supported mime types`, mimeTypeCanPlayMap, this.playableMimeTypes)
+    this.initWebAudio()
+  }
+
+  initWebAudio() {
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext
+    if (!AudioContextCtor) {
+      console.warn('[LocalPlayer] Web Audio API not supported, falling back to direct audio')
+      return
+    }
+    try {
+      this.audioContext = new AudioContextCtor()
+      this.audioSourceNode = this.audioContext.createMediaElementSource(this.player)
+      this.audioSourceNode.connect(this.audioContext.destination)
+      this.usingWebAudio = true
+      console.log('[LocalPlayer] Web Audio API pipeline initialised')
+    } catch (err) {
+      console.error('[LocalPlayer] Failed to initialise Web Audio API', err)
+      this.usingWebAudio = false
+    }
   }
 
   evtPlay() {
@@ -115,6 +138,7 @@ export default class LocalAudioPlayer extends EventEmitter {
 
   destroy() {
     this.destroyHlsInstance()
+    this.destroyWebAudio()
     if (this.player) {
       this.player.remove()
     }
@@ -231,6 +255,26 @@ export default class LocalAudioPlayer extends EventEmitter {
     this.hlsInstance = null
   }
 
+  destroyWebAudio() {
+    if (this.audioSourceNode) {
+      try {
+        this.audioSourceNode.disconnect()
+      } catch (err) {
+        // Ignore disconnect errors
+      }
+      this.audioSourceNode = null
+    }
+    if (this.audioContext) {
+      try {
+        this.audioContext.close()
+      } catch (err) {
+        // Ignore close errors
+      }
+      this.audioContext = null
+    }
+    this.usingWebAudio = false
+  }
+
   async resetStream(startTime) {
     this.destroyHlsInstance()
     await new Promise((resolve) => setTimeout(resolve, 1000))
@@ -245,7 +289,12 @@ export default class LocalAudioPlayer extends EventEmitter {
 
   play() {
     this.playWhenReady = true
-    if (this.player) this.player.play()
+    if (this.player) {
+      if (this.usingWebAudio && this.audioContext && this.audioContext.state === 'suspended') {
+        this.audioContext.resume()
+      }
+      this.player.play()
+    }
   }
 
   pause() {
