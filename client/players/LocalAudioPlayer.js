@@ -1,6 +1,7 @@
 import Hls from 'hls.js'
 import EventEmitter from 'events'
 import SilenceMap from './smart-speed/SilenceMap'
+import TimeMapper from './smart-speed/TimeMapper'
 
 export default class LocalAudioPlayer extends EventEmitter {
   constructor(ctx) {
@@ -28,6 +29,9 @@ export default class LocalAudioPlayer extends EventEmitter {
 
     this.silenceMap = new SilenceMap()
     this.silenceDetectorNode = null
+    this.silenceCompressorNode = null
+    this.timeMapper = new TimeMapper([], 1.0)
+    this.smartSpeedRatio = 2.0
     this.enableSmartSpeed = false
 
     this.initialize()
@@ -97,13 +101,29 @@ export default class LocalAudioPlayer extends EventEmitter {
     }
   }
 
+  updateSmartSpeedRegions() {
+    if (this.silenceCompressorNode) {
+      this.silenceCompressorNode.port.postMessage({ type: 'set-regions', regions: this.silenceMap.getRegions() })
+    }
+    this.timeMapper = new TimeMapper(this.silenceMap.getRegions(), this.smartSpeedRatio)
+  }
+
   async initSilenceDetector() {
     if (!this.usingWebAudio || !this.audioContext) return
     if (this.silenceDetectorNode) return
 
     try {
       await this.audioContext.audioWorklet.addModule('/client/players/smart-speed/SilenceDetectorProcessor.js')
+      await this.audioContext.audioWorklet.addModule('/client/players/smart-speed/SilenceCompressorProcessor.js')
       this.silenceDetectorNode = new AudioWorkletNode(this.audioContext, 'silence-detector')
+      this.silenceCompressorNode = new AudioWorkletNode(this.audioContext, 'silence-compressor')
+      this.silenceCompressorNode.port.postMessage({ type: 'set-ratio', value: this.smartSpeedRatio })
+      this.silenceCompressorNode.port.onmessage = (event) => {
+        const msg = event.data
+        if (msg.type === 'time-saved') {
+          this.emit('timeSaved', msg.ms)
+        }
+      }
 
       this.silenceDetectorNode.port.onmessage = (event) => {
         const msg = event.data
@@ -113,13 +133,15 @@ export default class LocalAudioPlayer extends EventEmitter {
           if (this._silenceStartTime !== null) {
             this.silenceMap.addRegion(this._silenceStartTime, msg.time)
             this._silenceStartTime = null
+            this.updateSmartSpeedRegions()
           }
         }
       }
 
       this.audioSourceNode.disconnect()
       this.audioSourceNode.connect(this.silenceDetectorNode)
-      this.silenceDetectorNode.connect(this.audioContext.destination)
+      this.silenceDetectorNode.connect(this.silenceCompressorNode)
+      this.silenceCompressorNode.connect(this.audioContext.destination)
 
       this._silenceStartTime = null
       console.log('[LocalPlayer] Silence detector initialised')
@@ -138,7 +160,14 @@ export default class LocalAudioPlayer extends EventEmitter {
       }
       this.silenceDetectorNode = null
     }
+    if (this.silenceCompressorNode) {
+      try {
+        this.silenceCompressorNode.disconnect()
+      } catch (err) {}
+      this.silenceCompressorNode = null
+    }
     this.silenceMap.reset()
+    this.updateSmartSpeedRegions()
     this._silenceStartTime = null
   }
 
@@ -291,6 +320,7 @@ export default class LocalAudioPlayer extends EventEmitter {
   loadCurrentTrack() {
     if (!this.currentTrack) return
     this.silenceMap.reset()
+    this.updateSmartSpeedRegions()
     // When direct play track is loaded current time needs to be set
     this.trackStartTime = Math.max(0, this.startTime - (this.currentTrack.startOffset || 0))
     this.player.src = this.currentTrack.relativeContentUrl
@@ -356,7 +386,14 @@ export default class LocalAudioPlayer extends EventEmitter {
 
   getCurrentTime() {
     var currentTrackOffset = this.currentTrack.startOffset || 0
-    return this.player ? currentTrackOffset + this.player.currentTime : 0
+    if (!this.player) return 0
+    
+    if (this.enableSmartSpeed) {
+      var audioMs = this.player.currentTime * 1000
+      var wallMs = this.timeMapper.audioToWallClock(audioMs)
+      return currentTrackOffset + (wallMs / 1000)
+    }
+    return currentTrackOffset + this.player.currentTime
   }
 
   getDuration() {
@@ -383,20 +420,28 @@ export default class LocalAudioPlayer extends EventEmitter {
   seek(time, playWhenReady) {
     if (!this.player) return
 
+    // Map wall-clock seek time to audio time before resetting regions
+    var mappedTime = time
+    if (this.enableSmartSpeed && time >= (this.currentTrack.startOffset || 0) && time <= (this.currentTrack.startOffset || 0) + (this.currentTrack.duration || Infinity)) {
+       var offsetTime = mappedTime - (this.currentTrack.startOffset || 0)
+       mappedTime = (this.currentTrack.startOffset || 0) + (this.timeMapper.wallClockToAudio(offsetTime * 1000) / 1000)
+    }
+
     this.silenceMap.reset()
+    this.updateSmartSpeedRegions()
     this.playWhenReady = playWhenReady
 
     if (this.isHlsTranscode) {
       // Seeking HLS stream
-      var offsetTime = time - (this.currentTrack.startOffset || 0)
+      var offsetTime = mappedTime - (this.currentTrack.startOffset || 0)
       this.player.currentTime = Math.max(0, offsetTime)
     } else {
       // Seeking Direct play
-      if (time < this.currentTrack.startOffset || time > this.currentTrack.startOffset + this.currentTrack.duration) {
+      if (mappedTime < this.currentTrack.startOffset || mappedTime > this.currentTrack.startOffset + this.currentTrack.duration) {
         // Change Track
-        var trackIndex = this.audioTracks.findIndex((t) => time >= t.startOffset && time < t.startOffset + t.duration)
+        var trackIndex = this.audioTracks.findIndex((t) => mappedTime >= t.startOffset && mappedTime < t.startOffset + t.duration)
         if (trackIndex >= 0) {
-          this.startTime = time
+          this.startTime = mappedTime
           this.currentTrackIndex = trackIndex
 
           if (!this.player.paused) {
@@ -406,7 +451,7 @@ export default class LocalAudioPlayer extends EventEmitter {
           this.loadCurrentTrack()
         }
       } else {
-        var offsetTime = time - (this.currentTrack.startOffset || 0)
+        var offsetTime = mappedTime - (this.currentTrack.startOffset || 0)
         this.player.currentTime = Math.max(0, offsetTime)
       }
     }
