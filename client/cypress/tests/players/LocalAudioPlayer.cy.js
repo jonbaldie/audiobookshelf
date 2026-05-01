@@ -88,4 +88,23 @@ describe('LocalAudioPlayer', () => {
       expect(localPlayer.player.playbackRate).to.equal(1.0);
     });
   });
+
+  it('maps currentTime, duration, and seek through the same Smart Speed wall-clock contract', () => {
+    const localPlayer = new LocalAudioPlayer({});
+
+    localPlayer.audioTracks = [{ startOffset: 0, duration: 12 }];
+    localPlayer.currentTrackIndex = 0;
+    localPlayer.enableSmartSpeed = true;
+    localPlayer.smartSpeedRatio = 2.0;
+    localPlayer.silenceMap.addRegion(2000, 6000);
+    localPlayer.updateSmartSpeedRegions();
+
+    localPlayer.player.currentTime = 8;
+
+    expect(localPlayer.getCurrentTime()).to.equal(6);
+    expect(localPlayer.getDuration()).to.equal(10);
+
+    localPlayer.seek(6, false);
+    expect(localPlayer.player.currentTime).to.equal(8);
+  });
 });
