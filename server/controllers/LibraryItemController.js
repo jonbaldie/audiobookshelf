@@ -75,7 +75,7 @@ class LibraryItemController {
       // Include users media progress
       if (includeEntities.includes('progress')) {
         const episodeId = req.query.episode || null
-        item.userMediaProgress = req.user.getOldMediaProgress(item.id, episodeId)
+        item.userMediaProgress = await req.user.getOldMediaProgress(item.id, episodeId)
       }
 
       if (includeEntities.includes('rssfeed')) {
