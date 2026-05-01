@@ -164,7 +164,7 @@ export default class LocalAudioPlayer extends EventEmitter {
     this._silenceStartTime = null
     
     // Reset playback rate in case we were in the middle of a silence region
-    if (this.player && this.player.playbackRate !== this.defaultPlaybackRate) {
+    if (this.player) {
       this.player.playbackRate = this.defaultPlaybackRate
     }
   }
@@ -398,7 +398,13 @@ export default class LocalAudioPlayer extends EventEmitter {
   setPlaybackRate(playbackRate) {
     if (!this.player) return
     this.defaultPlaybackRate = playbackRate
-    this.player.playbackRate = playbackRate
+    
+    // If we're in the middle of a silence region, we should multiply the new rate
+    if (this.enableSmartSpeed && this._silenceStartTime !== null) {
+      this.player.playbackRate = playbackRate * this.smartSpeedRatio
+    } else {
+      this.player.playbackRate = playbackRate
+    }
   }
 
   async setSmartSpeed(enabled) {
