@@ -16,6 +16,11 @@ class SilenceDetectorProcessor extends AudioWorkletProcessor {
 
     this.port.onmessage = (event) => {
       const msg = event.data
+      if (msg.type === 'reset') {
+        this.state = SPEAKING
+        this.candidateStartSample = 0
+        return
+      }
       if (msg.type === 'set-threshold') {
         this.silenceThreshold = msg.value
       }

@@ -57,6 +57,8 @@ export default class LocalAudioPlayer extends EventEmitter {
     this.player.addEventListener('error', this.evtError.bind(this))
     this.player.addEventListener('loadedmetadata', this.evtLoadedMetadata.bind(this))
     this.player.addEventListener('timeupdate', this.evtTimeupdate.bind(this))
+    this.player.addEventListener('waiting', this.evtWaiting.bind(this))
+    this.player.addEventListener('playing', this.evtPlaying.bind(this))
 
     var mimeTypes = [
       'audio/flac',
@@ -210,6 +212,18 @@ export default class LocalAudioPlayer extends EventEmitter {
   evtTimeupdate() {
     if (this.player.paused) {
       this.emit('timeupdate', this.getCurrentTime())
+    }
+  }
+
+  evtWaiting() {
+    if (this.audioContext && this.audioContext.state === 'running') {
+      this.audioContext.suspend()
+    }
+  }
+
+  evtPlaying() {
+    if (this.audioContext && this.audioContext.state === 'suspended') {
+      this.audioContext.resume()
     }
   }
 
@@ -420,6 +434,11 @@ export default class LocalAudioPlayer extends EventEmitter {
     if (!this.player) return
 
     var mappedTime = time
+
+    if (this.silenceDetectorNode) {
+      this.silenceDetectorNode.port.postMessage({ type: 'reset' })
+      this._silenceStartTime = null
+    }
 
     this.silenceMap.reset()
     this.updateSmartSpeedRegions()
