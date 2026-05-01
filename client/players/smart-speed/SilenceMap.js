@@ -38,6 +38,12 @@ class SilenceMap {
     }
 
     this._regions = merged
+    
+    // Cap the number of regions to prevent memory leaks for long audiobooks
+    // Assuming each region is ~1 second, 5000 regions is over an hour of silence
+    if (this._regions.length > 5000) {
+      this._regions = this._regions.slice(-5000)
+    }
   }
 
   getCompressedOffset(atTimeMs, ratio) {
