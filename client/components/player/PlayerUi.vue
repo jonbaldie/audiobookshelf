@@ -326,10 +326,21 @@ export default {
 
       if (this.$refs.trackbar) this.$refs.trackbar.setUseChapterTrack(this.useChapterTrack)
       this.setPlaybackRate(this.playbackRate)
+      
+      const enableSmartSpeed = this.$store.getters['user/getUserSetting']('enableSmartSpeed')
+      const smartSpeedRatio = this.$store.getters['user/getUserSetting']('smartSpeedRatio')
+      if (this.playerHandler && this.playerHandler.isPlayingLocalItem) {
+        this.playerHandler.setSmartSpeed(enableSmartSpeed || false, smartSpeedRatio || 2.5)
+      }
     },
     settingsUpdated(settings) {
       if (settings.playbackRate && this.playbackRate !== settings.playbackRate) {
         this.setPlaybackRate(settings.playbackRate)
+      }
+      if (this.playerHandler && this.playerHandler.isPlayingLocalItem && (settings.enableSmartSpeed !== undefined || settings.smartSpeedRatio !== undefined)) {
+        const enableSmartSpeed = settings.enableSmartSpeed !== undefined ? settings.enableSmartSpeed : this.$store.getters['user/getUserSetting']('enableSmartSpeed')
+        const smartSpeedRatio = settings.smartSpeedRatio !== undefined ? settings.smartSpeedRatio : this.$store.getters['user/getUserSetting']('smartSpeedRatio')
+        this.playerHandler.setSmartSpeed(enableSmartSpeed || false, smartSpeedRatio || 2.5)
       }
     },
     closePlayer() {
