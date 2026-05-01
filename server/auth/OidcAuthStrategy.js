@@ -396,9 +396,9 @@ class OidcAuthStrategy {
       if (authMethod === 'openid') {
         const protocol = req.secure || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http'
         const host = req.get('host')
-        // TODO: ABS does currently not support subfolders for installation
-        // If we want to support it we need to include a config for the serverurl
-        postLogoutRedirectUri = `${protocol}://${host}${global.RouterBasePath}/login`
+        const hostUrl = new URL(`${protocol}://${host}`)
+        const subfolder = global.ServerSettings.authOpenIDSubfolderForRedirectURLs || ''
+        postLogoutRedirectUri = new URL(`${subfolder}/login`, hostUrl).toString()
       }
       // else for openid-mobile we keep postLogoutRedirectUri on null
       //  nice would be to redirect to the app here, but for example Authentik does not implement
