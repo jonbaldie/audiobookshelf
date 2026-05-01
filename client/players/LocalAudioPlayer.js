@@ -399,8 +399,9 @@ export default class LocalAudioPlayer extends EventEmitter {
   getCurrentTime() {
     var currentTrackOffset = this.currentTrack.startOffset || 0
     if (!this.player) return 0
-    
-    return currentTrackOffset + this.player.currentTime
+
+    const audioTimeMs = (currentTrackOffset + this.player.currentTime) * 1000
+    return this.timeMapper.audioToWallClock(audioTimeMs) / 1000
   }
 
   getDuration() {
@@ -433,7 +434,7 @@ export default class LocalAudioPlayer extends EventEmitter {
   seek(time, playWhenReady) {
     if (!this.player) return
 
-    var mappedTime = time
+    var mappedTime = this.timeMapper.wallClockToAudio(time * 1000) / 1000
 
     if (this.silenceDetectorNode) {
       this.silenceDetectorNode.port.postMessage({ type: 'reset' })

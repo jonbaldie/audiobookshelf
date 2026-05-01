@@ -142,5 +142,21 @@ describe('TimeMapper', () => {
         prevAudio = audioMs
       }
     })
+
+    it('19. Local player wall-clock current time semantics hold across a compressed region', () => {
+      const mapper = new TimeMapper([{ start: 2000, end: 6000 }], 2.0)
+      const rawAudioTimeMs = 8000
+      const wallClockTimeMs = mapper.audioToWallClock(rawAudioTimeMs)
+
+      expect(wallClockTimeMs).to.equal(6000)
+    })
+
+    it('20. Local player wall-clock seek semantics map back to raw audio time', () => {
+      const mapper = new TimeMapper([{ start: 2000, end: 6000 }], 2.0)
+      const requestedWallClockMs = 6000
+      const rawAudioTimeMs = mapper.wallClockToAudio(requestedWallClockMs)
+
+      expect(rawAudioTimeMs).to.equal(8000)
+    })
   })
 })

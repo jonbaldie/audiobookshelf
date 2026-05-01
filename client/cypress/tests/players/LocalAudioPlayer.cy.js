@@ -88,4 +88,32 @@ describe('LocalAudioPlayer', () => {
       expect(localPlayer.player.playbackRate).to.equal(1.0);
     });
   });
+
+  it('reports wall-clock current time when smart speed has detected silence', () => {
+    const localPlayer = new LocalAudioPlayer({});
+
+    localPlayer.audioTracks = [{ startOffset: 0, duration: 120, relativeContentUrl: '/track-1.mp3' }];
+    localPlayer.currentTrackIndex = 0;
+    localPlayer.smartSpeedRatio = 2.0;
+    localPlayer.player.currentTime = 8;
+    localPlayer.silenceMap.addRegion(2000, 6000);
+    localPlayer.updateSmartSpeedRegions();
+
+    expect(localPlayer.getCurrentTime()).to.equal(6);
+  });
+
+  it('maps wall-clock seek targets back to audio time when smart speed is active', () => {
+    const localPlayer = new LocalAudioPlayer({});
+
+    localPlayer.audioTracks = [{ startOffset: 0, duration: 120, relativeContentUrl: '/track-1.mp3' }];
+    localPlayer.currentTrackIndex = 0;
+    localPlayer.smartSpeedRatio = 2.0;
+    localPlayer.enableSmartSpeed = true;
+    localPlayer.silenceMap.addRegion(2000, 6000);
+    localPlayer.updateSmartSpeedRegions();
+
+    localPlayer.seek(6, false);
+
+    expect(localPlayer.player.currentTime).to.equal(8);
+  });
 });
