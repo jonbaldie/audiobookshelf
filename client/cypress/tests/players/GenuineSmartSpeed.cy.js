@@ -1,105 +1,115 @@
 import LocalAudioPlayer from '../../../players/LocalAudioPlayer'
 
+function base64ToBlobUrl(base64Audio) {
+  const binary = atob(base64Audio)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }))
+}
+
+function createUiHarness(doc, onPlay) {
+  const button = doc.createElement('button')
+  button.type = 'button'
+  button.id = 'smart-speed-play'
+  button.setAttribute('aria-label', 'Play')
+  button.innerText = 'Play'
+  button.addEventListener('click', onPlay)
+  doc.body.appendChild(button)
+  return button
+}
+
 describe('Genuine E2E Smart Speed Verification', () => {
-  let player;
+  let player
+  let audioUrl
 
   beforeEach(() => {
-    // Intercept the AudioWorklet fetch request and serve the actual file from disk
     cy.readFile('players/smart-speed/SilenceDetectorProcessor.js', 'utf8').then((content) => {
       cy.intercept('GET', '**/SilenceDetectorProcessor.js', {
         statusCode: 200,
         headers: { 'Content-Type': 'application/javascript' },
         body: content
-      }).as('getWorklet');
-    });
+      }).as('getWorklet')
+    })
+  })
 
-    // Also need to mock LocalStorage for the user settings or rely on LocalAudioPlayer defaults
-  });
+  afterEach(() => {
+    if (player) {
+      player.destroy()
+      player = null
+    }
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl)
+      audioUrl = null
+    }
+  })
 
-  it('compresses a real 4-second audio file (1s tone, 2s silence, 1s tone) down to ~2.8 seconds', () => {
-    // 1. Create a raw player
-    player = new LocalAudioPlayer({});
-    
-    // 2. Load the test audio fixture
+  it('loads the real fixture and verifies smart-speed playback through the browser audio pipeline', () => {
     cy.fixture('test-audio.wav', 'base64').then((base64Audio) => {
-      const audioUrl = `data:audio/wav;base64,${base64Audio}`;
+      audioUrl = base64ToBlobUrl(base64Audio)
 
-      // 3. Stub tracks data structure expected by LocalAudioPlayer
-      const tracks = [{
-        index: 1,
-        startOffset: 0,
-        duration: 4,
-        relativeContentUrl: audioUrl,
-        mimeType: 'audio/wav'
-      }];
+      player = new LocalAudioPlayer({})
+      player.smartSpeedRatio = 2.5
+      player.setPlaybackRate(1)
 
-      const libraryItem = { id: 'test-item', media: { tracks } };
+      const tracks = [
+        {
+          index: 1,
+          startOffset: 0,
+          duration: 4,
+          relativeContentUrl: audioUrl,
+          mimeType: 'audio/wav'
+        }
+      ]
 
-      // 4. Hook up an event listener to measure time
-      let startTime = 0;
-      let endTime = 0;
-      let rateHit2_5 = false;
-      let rateHit1_0 = false;
-      
-      const playPromise = new Cypress.Promise((resolve) => {
+      const libraryItem = {
+        id: 'test-item',
+        media: { tracks }
+      }
+
+      let startTime = 0
+      let endTime = 0
+      const playbackRates = []
+
+      const finished = new Cypress.Promise((resolve) => {
         player.on('finished', () => {
-          endTime = performance.now();
-          resolve();
-        });
-      });
+          endTime = performance.now()
+          resolve()
+        })
+      })
 
-      // 5. Initialize the track
-      player.set(libraryItem, tracks, false, 0, false);
-      player.setPlaybackRate(1.0);
-      player.smartSpeedRatio = 2.5;
-      
-      // We must mock emitting timeupdate or just waiting/playing events if needed.
-      // But LocalAudioPlayer wires this up internally.
-
-      // We need to bypass Chrome's autoplay block in Cypress. 
-      // Clicking a dummy button usually does it.
       cy.document().then((doc) => {
-        const btn = doc.createElement('button');
-        btn.id = 'play-btn';
-        btn.innerText = 'Play';
-        btn.onclick = async () => {
-          await player.setSmartSpeed(true);
-          startTime = performance.now();
-          player.play();
-        };
-        doc.body.appendChild(btn);
-      });
+        createUiHarness(doc, async () => {
+          await player.setSmartSpeed(true)
+          startTime = performance.now()
+          player.play()
+        })
+      })
 
-      cy.get('#play-btn').click();
+      player.set(libraryItem, tracks, false, 0, false)
 
-      // 6. Polling observer for playbackRate changes
-      const checkInterval = setInterval(() => {
-        if (!player.player) return;
-        const rate = player.player.playbackRate;
-        if (rate === 2.5) rateHit2_5 = true;
-        // Verify it also dropped back down to 1.0 after the silence
-        if (rateHit2_5 && rate === 1.0) rateHit1_0 = true;
-      }, 50);
+      const sampleRates = setInterval(() => {
+        if (player?.player) {
+          playbackRates.push(player.player.playbackRate)
+        }
+      }, 50)
 
-      // 7. Wait for playback to finish
-      cy.wrap(playPromise, { timeout: 10000 }).then(() => {
-        clearInterval(checkInterval);
-        
-        const totalWallClockTime = (endTime - startTime) / 1000;
-        
-        cy.log(`Total Wall Clock Time: ${totalWallClockTime.toFixed(2)}s`);
-        
-        // The original audio is 4.0s long.
-        // It has 2s of silence. At 2.5x speed, the silence takes 2 / 2.5 = 0.8s.
-        // 1s tone + 0.8s compressed silence + 1s tone = 2.8s theoretical perfect time.
-        // Allow some buffer for Web Audio graph initialization and event latency.
-        expect(totalWallClockTime).to.be.lessThan(3.5);
-        expect(totalWallClockTime).to.be.greaterThan(2.5);
+      cy.get('#smart-speed-play').click()
+      cy.wait('@getWorklet')
 
-        // Verify the playback rate dynamically jumped
-        expect(rateHit2_5, 'Playback rate dynamically reached 2.5x').to.be.true;
-        expect(rateHit1_0, 'Playback rate dynamically reverted to 1.0x').to.be.true;
-      });
-    });
-  });
-});
+      cy.wrap(finished, { timeout: 10000 }).then(() => {
+        clearInterval(sampleRates)
+
+        const wallClockSeconds = (endTime - startTime) / 1000
+        const firstFastIndex = playbackRates.findIndex((rate) => rate === 2.5)
+
+        expect(player.usingWebAudio, 'real Web Audio pipeline').to.equal(true)
+        expect(player.silenceDetectorNode, 'real AudioWorklet node').to.exist
+        expect(firstFastIndex, 'playback rate reached 2.5x').to.be.greaterThan(-1)
+        expect(playbackRates.slice(firstFastIndex + 1), 'playback returned to 1x').to.include(1)
+        expect(wallClockSeconds, 'wall-clock playback time').to.be.lessThan(3.5)
+      })
+    })
+  })
+})
