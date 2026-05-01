@@ -1,5 +1,6 @@
 import Hls from 'hls.js'
 import EventEmitter from 'events'
+import SilenceMap from './smart-speed/SilenceMap'
 
 export default class LocalAudioPlayer extends EventEmitter {
   constructor(ctx) {
@@ -24,6 +25,10 @@ export default class LocalAudioPlayer extends EventEmitter {
     this.audioContext = null
     this.audioSourceNode = null
     this.usingWebAudio = false
+
+    this.silenceMap = new SilenceMap()
+    this.silenceDetectorNode = null
+    this.enableSmartSpeed = false
 
     this.initialize()
   }
@@ -92,6 +97,51 @@ export default class LocalAudioPlayer extends EventEmitter {
     }
   }
 
+  async initSilenceDetector() {
+    if (!this.usingWebAudio || !this.audioContext) return
+    if (this.silenceDetectorNode) return
+
+    try {
+      await this.audioContext.audioWorklet.addModule('/client/players/smart-speed/SilenceDetectorProcessor.js')
+      this.silenceDetectorNode = new AudioWorkletNode(this.audioContext, 'silence-detector')
+
+      this.silenceDetectorNode.port.onmessage = (event) => {
+        const msg = event.data
+        if (msg.type === 'silence-start') {
+          this._silenceStartTime = msg.time
+        } else if (msg.type === 'silence-end') {
+          if (this._silenceStartTime !== null) {
+            this.silenceMap.addRegion(this._silenceStartTime, msg.time)
+            this._silenceStartTime = null
+          }
+        }
+      }
+
+      this.audioSourceNode.disconnect()
+      this.audioSourceNode.connect(this.silenceDetectorNode)
+      this.silenceDetectorNode.connect(this.audioContext.destination)
+
+      this._silenceStartTime = null
+      console.log('[LocalPlayer] Silence detector initialised')
+    } catch (err) {
+      console.warn('[LocalPlayer] Failed to initialise silence detector', err)
+      this.silenceDetectorNode = null
+    }
+  }
+
+  destroySilenceDetector() {
+    if (this.silenceDetectorNode) {
+      try {
+        this.silenceDetectorNode.disconnect()
+      } catch (err) {
+        // Ignore disconnect errors
+      }
+      this.silenceDetectorNode = null
+    }
+    this.silenceMap.reset()
+    this._silenceStartTime = null
+  }
+
   evtPlay() {
     this.emit('stateChange', 'PLAYING')
   }
@@ -137,6 +187,7 @@ export default class LocalAudioPlayer extends EventEmitter {
   }
 
   destroy() {
+    this.destroySilenceDetector()
     this.destroyHlsInstance()
     this.destroyWebAudio()
     if (this.player) {
@@ -239,6 +290,7 @@ export default class LocalAudioPlayer extends EventEmitter {
 
   loadCurrentTrack() {
     if (!this.currentTrack) return
+    this.silenceMap.reset()
     // When direct play track is loaded current time needs to be set
     this.trackStartTime = Math.max(0, this.startTime - (this.currentTrack.startOffset || 0))
     this.player.src = this.currentTrack.relativeContentUrl
@@ -319,9 +371,19 @@ export default class LocalAudioPlayer extends EventEmitter {
     this.player.playbackRate = playbackRate
   }
 
+  async setSmartSpeed(enabled) {
+    this.enableSmartSpeed = enabled
+    if (enabled && this.usingWebAudio) {
+      await this.initSilenceDetector()
+    } else {
+      this.destroySilenceDetector()
+    }
+  }
+
   seek(time, playWhenReady) {
     if (!this.player) return
 
+    this.silenceMap.reset()
     this.playWhenReady = playWhenReady
 
     if (this.isHlsTranscode) {
