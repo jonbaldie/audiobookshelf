@@ -708,17 +708,24 @@ class User extends Model {
 
   /**
    * Get old media progress
-   * TODO: Update to new model
    *
    * @param {string} libraryItemId
    * @param {string} [episodeId]
-   * @returns
+   * @returns {Promise<object|null>}
    */
-  getOldMediaProgress(libraryItemId, episodeId = null) {
-    const mediaProgress = this.mediaProgresses?.find((mp) => {
-      if (episodeId && mp.mediaItemId !== episodeId) return false
-      return mp.extraData?.libraryItemId === libraryItemId
+  async getOldMediaProgress(libraryItemId, episodeId = null) {
+    if (episodeId) {
+      const mediaProgress = this.mediaProgresses?.find((mp) => mp.mediaItemId === episodeId)
+      return mediaProgress?.getOldMediaProgress() || null
+    }
+
+    const libraryItem = await this.sequelize.models.libraryItem.findByPk(libraryItemId, {
+      attributes: ['id', 'mediaId', 'mediaType']
     })
+    if (!libraryItem) return null
+    if (libraryItem.mediaType === 'podcast') return null
+
+    const mediaProgress = this.mediaProgresses?.find((mp) => mp.mediaItemId === libraryItem.mediaId)
     return mediaProgress?.getOldMediaProgress() || null
   }
 

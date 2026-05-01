@@ -117,7 +117,7 @@ class MeController {
    * @param {Response} res
    */
   async getMediaProgress(req, res) {
-    const mediaProgress = req.user.getOldMediaProgress(req.params.id, req.params.episodeId || null)
+    const mediaProgress = await req.user.getOldMediaProgress(req.params.id, req.params.episodeId || null)
     if (!mediaProgress) {
       return res.sendStatus(404)
     }
