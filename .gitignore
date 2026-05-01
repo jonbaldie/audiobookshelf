@@ -32,3 +32,5 @@ tailwind.config.js
 .worktrees/
 .worktrees/
 .worktrees/
+
+.worktrees
