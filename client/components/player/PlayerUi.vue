@@ -132,9 +132,9 @@ export default {
     timeRemaining() {
       if (this.useChapterTrack && this.currentChapter) {
         var currChapTime = this.currentTime - this.currentChapter.start
-        return (this.currentChapterDuration - currChapTime) / this.playbackRate
+        return this.currentChapterDuration - currChapTime
       }
-      return (this.duration - this.currentTime) / this.playbackRate
+      return this.duration - this.currentTime
     },
     timeRemainingPretty() {
       if (this.timeRemaining < 0) {
@@ -309,7 +309,7 @@ export default {
         return
       }
       const time = this.useChapterTrack ? Math.max(0, this.currentTime - this.currentChapterStart) : this.currentTime
-      ts.innerText = this.$secondsToTimestamp(time / this.playbackRate)
+      ts.innerText = this.$secondsToTimestamp(time)
     },
     setBufferTime(bufferTime) {
       if (this.$refs.trackbar) this.$refs.trackbar.setBufferTime(bufferTime)
