@@ -29,7 +29,6 @@ export default class LocalAudioPlayer extends EventEmitter {
 
     this.silenceMap = new SilenceMap()
     this.silenceDetectorNode = null
-    this.silenceCompressorNode = null
     this.timeMapper = new TimeMapper([], 1.0)
     this.smartSpeedRatio = 2.0
     this.enableSmartSpeed = false
@@ -102,10 +101,8 @@ export default class LocalAudioPlayer extends EventEmitter {
   }
 
   updateSmartSpeedRegions() {
-    if (this.silenceCompressorNode) {
-      this.silenceCompressorNode.port.postMessage({ type: 'set-regions', regions: this.silenceMap.getRegions() })
-    }
     this.timeMapper = new TimeMapper(this.silenceMap.getRegions(), this.smartSpeedRatio)
+    this.emit('timeSaved', this.timeMapper.totalTimeSaved())
   }
 
   async initSilenceDetector() {
@@ -114,24 +111,27 @@ export default class LocalAudioPlayer extends EventEmitter {
 
     try {
       await this.audioContext.audioWorklet.addModule('/client/players/smart-speed/SilenceDetectorProcessor.js')
-      await this.audioContext.audioWorklet.addModule('/client/players/smart-speed/SilenceCompressorProcessor.js')
       this.silenceDetectorNode = new AudioWorkletNode(this.audioContext, 'silence-detector')
-      this.silenceCompressorNode = new AudioWorkletNode(this.audioContext, 'silence-compressor')
-      this.silenceCompressorNode.port.postMessage({ type: 'set-ratio', value: this.smartSpeedRatio })
-      this.silenceCompressorNode.port.onmessage = (event) => {
-        const msg = event.data
-        if (msg.type === 'time-saved') {
-          this.emit('timeSaved', msg.ms)
-        }
-      }
 
       this.silenceDetectorNode.port.onmessage = (event) => {
         const msg = event.data
         if (msg.type === 'silence-start') {
-          this._silenceStartTime = msg.time
+          // Map AudioContext time to Media time
+          const delayMs = this.audioContext.currentTime * 1000 - msg.time
+          this._silenceStartTime = this.player.currentTime * 1000 - delayMs
+          
+          // Dynamically increase playback rate
+          if (this.enableSmartSpeed) {
+            this.player.playbackRate = this.defaultPlaybackRate * this.smartSpeedRatio
+          }
         } else if (msg.type === 'silence-end') {
+          if (this.enableSmartSpeed) {
+            this.player.playbackRate = this.defaultPlaybackRate
+          }
           if (this._silenceStartTime !== null) {
-            this.silenceMap.addRegion(this._silenceStartTime, msg.time)
+            const delayMs = this.audioContext.currentTime * 1000 - msg.time
+            const silenceEndTime = this.player.currentTime * 1000 - delayMs
+            this.silenceMap.addRegion(this._silenceStartTime, silenceEndTime)
             this._silenceStartTime = null
             this.updateSmartSpeedRegions()
           }
@@ -140,8 +140,7 @@ export default class LocalAudioPlayer extends EventEmitter {
 
       this.audioSourceNode.disconnect()
       this.audioSourceNode.connect(this.silenceDetectorNode)
-      this.silenceDetectorNode.connect(this.silenceCompressorNode)
-      this.silenceCompressorNode.connect(this.audioContext.destination)
+      this.silenceDetectorNode.connect(this.audioContext.destination)
 
       this._silenceStartTime = null
       console.log('[LocalPlayer] Silence detector initialised')
@@ -160,15 +159,14 @@ export default class LocalAudioPlayer extends EventEmitter {
       }
       this.silenceDetectorNode = null
     }
-    if (this.silenceCompressorNode) {
-      try {
-        this.silenceCompressorNode.disconnect()
-      } catch (err) {}
-      this.silenceCompressorNode = null
-    }
     this.silenceMap.reset()
     this.updateSmartSpeedRegions()
     this._silenceStartTime = null
+    
+    // Reset playback rate in case we were in the middle of a silence region
+    if (this.player && this.player.playbackRate !== this.defaultPlaybackRate) {
+      this.player.playbackRate = this.defaultPlaybackRate
+    }
   }
 
   evtPlay() {
@@ -388,11 +386,6 @@ export default class LocalAudioPlayer extends EventEmitter {
     var currentTrackOffset = this.currentTrack.startOffset || 0
     if (!this.player) return 0
     
-    if (this.enableSmartSpeed) {
-      var audioMs = this.player.currentTime * 1000
-      var wallMs = this.timeMapper.audioToWallClock(audioMs)
-      return currentTrackOffset + (wallMs / 1000)
-    }
     return currentTrackOffset + this.player.currentTime
   }
 
@@ -420,16 +413,16 @@ export default class LocalAudioPlayer extends EventEmitter {
   seek(time, playWhenReady) {
     if (!this.player) return
 
-    // Map wall-clock seek time to audio time before resetting regions
     var mappedTime = time
-    if (this.enableSmartSpeed && time >= (this.currentTrack.startOffset || 0) && time <= (this.currentTrack.startOffset || 0) + (this.currentTrack.duration || Infinity)) {
-       var offsetTime = mappedTime - (this.currentTrack.startOffset || 0)
-       mappedTime = (this.currentTrack.startOffset || 0) + (this.timeMapper.wallClockToAudio(offsetTime * 1000) / 1000)
-    }
 
     this.silenceMap.reset()
     this.updateSmartSpeedRegions()
     this.playWhenReady = playWhenReady
+    
+    // Reset playback rate in case we were in a silence region
+    if (this.enableSmartSpeed && this.player.playbackRate !== this.defaultPlaybackRate) {
+      this.player.playbackRate = this.defaultPlaybackRate
+    }
 
     if (this.isHlsTranscode) {
       // Seeking HLS stream
