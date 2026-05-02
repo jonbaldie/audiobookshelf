@@ -198,7 +198,11 @@ describe('MediaPlayerContainer', () => {
             setDuration() {},
             setCurrentTime() {},
             setBufferTime() {},
-            setStreamReady() {}
+            setStreamReady() {},
+            setChunksReady() {},
+            checkUpdateChapterTrack() {},
+            prevChapter() {},
+            nextChapter() {}
           }
         },
         'controls-playback-speed-control': { template: '<div />' },
