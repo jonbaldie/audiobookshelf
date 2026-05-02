@@ -32,6 +32,7 @@ export default class LocalAudioPlayer extends EventEmitter {
     this.timeMapper = new TimeMapper([], 1.0)
     this.smartSpeedRatio = 2.0
     this.enableSmartSpeed = false
+    this._lastQueuedSilenceEndTime = 0
 
     this.initialize()
   }
@@ -121,21 +122,12 @@ export default class LocalAudioPlayer extends EventEmitter {
           // Map AudioContext time to Media time
           const delayMs = this.audioContext.currentTime * 1000 - msg.time
           this._silenceStartTime = this.player.currentTime * 1000 - delayMs
-          
-          // Dynamically increase playback rate
-          if (this.enableSmartSpeed) {
-            this.player.playbackRate = this.defaultPlaybackRate * this.smartSpeedRatio
-          }
         } else if (msg.type === 'silence-end') {
-          if (this.enableSmartSpeed) {
-            this.player.playbackRate = this.defaultPlaybackRate
-          }
           if (this._silenceStartTime !== null) {
             const delayMs = this.audioContext.currentTime * 1000 - msg.time
             const silenceEndTime = this.player.currentTime * 1000 - delayMs
-            this.silenceMap.addRegion(this._silenceStartTime, silenceEndTime)
+            this.addSmartSpeedRegion(this._silenceStartTime, silenceEndTime)
             this._silenceStartTime = null
-            this.updateSmartSpeedRegions()
           }
         }
       }
@@ -164,11 +156,22 @@ export default class LocalAudioPlayer extends EventEmitter {
     this.silenceMap.reset()
     this.updateSmartSpeedRegions()
     this._silenceStartTime = null
-    
-    // Reset playback rate in case we were in the middle of a silence region
-    if (this.player) {
-      this.player.playbackRate = this.defaultPlaybackRate
-    }
+    this._lastQueuedSilenceEndTime = 0
+  }
+
+  addSmartSpeedRegion(startMs, endMs) {
+    if (!this.enableSmartSpeed) return false
+    if (typeof startMs !== 'number' || typeof endMs !== 'number') return false
+    if (endMs <= startMs) return false
+
+    const clampedStartMs = Math.max(startMs, this._lastQueuedSilenceEndTime)
+    if (endMs <= clampedStartMs) return false
+
+    this.silenceMap.addRegion(clampedStartMs, endMs)
+    this.updateSmartSpeedRegions()
+    this._lastQueuedSilenceEndTime = endMs
+
+    return true
   }
 
   evtPlay() {
@@ -333,6 +336,7 @@ export default class LocalAudioPlayer extends EventEmitter {
     if (!this.currentTrack) return
     this.silenceMap.reset()
     this.updateSmartSpeedRegions()
+    this._lastQueuedSilenceEndTime = 0
     // When direct play track is loaded current time needs to be set
     this.trackStartTime = Math.max(0, this.startTime - (this.currentTrack.startOffset || 0))
     this.player.src = this.currentTrack.relativeContentUrl
@@ -414,13 +418,7 @@ export default class LocalAudioPlayer extends EventEmitter {
   setPlaybackRate(playbackRate) {
     if (!this.player) return
     this.defaultPlaybackRate = playbackRate
-    
-    // If we're in the middle of a silence region, we should multiply the new rate
-    if (this.enableSmartSpeed && this._silenceStartTime !== null) {
-      this.player.playbackRate = playbackRate * this.smartSpeedRatio
-    } else {
-      this.player.playbackRate = playbackRate
-    }
+    this.player.playbackRate = playbackRate
   }
 
   async setSmartSpeed(enabled) {
@@ -444,12 +442,8 @@ export default class LocalAudioPlayer extends EventEmitter {
 
     this.silenceMap.reset()
     this.updateSmartSpeedRegions()
+    this._lastQueuedSilenceEndTime = 0
     this.playWhenReady = playWhenReady
-    
-    // Reset playback rate in case we were in a silence region
-    if (this.enableSmartSpeed && this.player.playbackRate !== this.defaultPlaybackRate) {
-      this.player.playbackRate = this.defaultPlaybackRate
-    }
 
     if (this.isHlsTranscode) {
       // Seeking HLS stream

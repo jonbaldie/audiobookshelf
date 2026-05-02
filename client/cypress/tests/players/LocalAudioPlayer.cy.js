@@ -4,6 +4,7 @@ describe('LocalAudioPlayer', () => {
   let mockPort;
   let mockAudioContext;
   let mockAudioWorkletNode;
+  let mockSourceNode;
 
   beforeEach(() => {
     // Mock for AudioWorkletNode message port
@@ -12,9 +13,13 @@ describe('LocalAudioPlayer', () => {
       postMessage: cy.stub()
     };
 
-    // Mock AudioWorkletNode
     mockAudioWorkletNode = {
       port: mockPort,
+      connect: cy.stub(),
+      disconnect: cy.stub()
+    };
+
+    mockSourceNode = {
       connect: cy.stub(),
       disconnect: cy.stub()
     };
@@ -24,10 +29,7 @@ describe('LocalAudioPlayer', () => {
       audioWorklet: {
         addModule: cy.stub().resolves()
       },
-      createMediaElementSource: cy.stub().returns({
-        connect: cy.stub(),
-        disconnect: cy.stub()
-      }),
+      createMediaElementSource: cy.stub().returns(mockSourceNode),
       destination: {},
       state: 'running',
       currentTime: 10
@@ -51,41 +53,49 @@ describe('LocalAudioPlayer', () => {
     }
   });
 
-  it('increases playbackRate during silence', () => {
+  it('keeps playbackRate stable while recording silence regions', () => {
     const localPlayer = new LocalAudioPlayer({});
-    
-    // Default playback rate should be 1
     expect(localPlayer.player.playbackRate).to.equal(1);
-    
+
     cy.wrap(localPlayer).should('have.property', 'usingWebAudio', true).then(() => {
-      // Enable smart speed (this should trigger initSilenceDetector)
       return localPlayer.setSmartSpeed(true);
     }).then(() => {
       expect(localPlayer.enableSmartSpeed).to.be.true;
       expect(mockAudioContext.audioWorklet.addModule).to.have.been.calledWith('/client/players/smart-speed/SilenceDetectorProcessor.js');
       expect(localPlayer.silenceDetectorNode).to.equal(mockAudioWorkletNode);
-      
-      // Simulate silence start
+      expect(mockSourceNode.connect).to.have.been.calledWith(mockAudioWorkletNode);
+      expect(mockAudioWorkletNode.connect).to.have.been.calledWith(mockAudioContext.destination);
+
       mockPort.onmessage({
         data: {
           type: 'silence-start',
-          time: 5000 // 5 seconds
+          time: 5000
         }
       });
-      
-      // The smartSpeedRatio is 2.0 by default, so playbackRate should be 2.0
-      expect(localPlayer.player.playbackRate).to.equal(2.0);
-      
-      // Simulate silence end
+
+      expect(localPlayer.player.playbackRate).to.equal(1.0);
+
       mockPort.onmessage({
         data: {
           type: 'silence-end',
-          time: 8000 // 8 seconds
+          time: 8000
         }
       });
-      
-      // Should return to default 1.0
+
       expect(localPlayer.player.playbackRate).to.equal(1.0);
+      expect(localPlayer.silenceMap.getRegions()).to.deep.equal([{ start: 0, end: 3000 }]);
+    });
+  });
+
+  it('drops duplicate or overlapping silence updates before tracking them', () => {
+    const localPlayer = new LocalAudioPlayer({});
+
+    cy.wrap(localPlayer).then(() => localPlayer.setSmartSpeed(true)).then(() => {
+      expect(localPlayer.addSmartSpeedRegion(1000, 2000)).to.equal(true);
+      expect(localPlayer.addSmartSpeedRegion(1500, 2500)).to.equal(true);
+      expect(localPlayer.addSmartSpeedRegion(1200, 1800)).to.equal(false);
+
+      expect(localPlayer.silenceMap.getRegions()).to.deep.equal([{ start: 1000, end: 2500 }]);
     });
   });
 

@@ -101,4 +101,17 @@ describe('SmartSpeedProcessorCore', () => {
     expect(result.totalDroppedSamples).to.equal(0)
     expect(Array.from(result.output)).to.deep.equal([1, 2, 3])
   })
+
+  it('does not overdrop when overlapping silence updates are clamped to a monotonic stream', () => {
+    const core = new SmartSpeedProcessorCore({ sampleRate: 1000, compressionRatio: 2 })
+
+    core.updateRegion(true, 1000)
+    core.updateRegion(true, 500)
+
+    const result = core.process(new Float32Array(new Array(800).fill(0)))
+
+    expect(result.droppedSamples).to.equal(750)
+    expect(result.totalDroppedSamples).to.equal(750)
+    expect(result.isActive).to.equal(false)
+  })
 })
