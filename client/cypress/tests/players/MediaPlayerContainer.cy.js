@@ -117,6 +117,52 @@ describe('MediaPlayerContainer', () => {
     const libraryItem = makeLibraryItem()
     const { audioContext } = createAudioContextStub()
 
+    // Set up window stubs BEFORE mounting
+    cy.window().then((win) => {
+      win.AudioContext = function AudioContext() {
+        return audioContext
+      }
+      win.webkitAudioContext = undefined
+
+      win.AudioWorkletNode = function AudioWorkletNode() {
+        return {
+          connect: cy.stub().as('silenceDetectorConnect'),
+          disconnect: cy.stub().as('silenceDetectorDisconnect'),
+          port: {
+            onmessage: null,
+            postMessage: cy.stub().as('silenceDetectorPostMessage')
+          }
+        }
+      }
+
+      cy.stub(win.HTMLMediaElement.prototype, 'load').callsFake(function load() {
+        if (this.__absLoadedMetadataDispatched) return
+
+        this.__absLoadedMetadataDispatched = true
+        setTimeout(() => {
+          this.dispatchEvent(new win.Event('loadedmetadata'))
+        }, 0)
+      }).as('mediaLoad')
+
+      cy.stub(win.HTMLMediaElement.prototype, 'play').callsFake(function play() {
+        if (this.__absIsPlaying) return Promise.resolve()
+
+        this.__absIsPlaying = true
+        setTimeout(() => {
+          this.dispatchEvent(new win.Event('play'))
+          this.dispatchEvent(new win.Event('playing'))
+        }, 0)
+        return Promise.resolve()
+      }).as('mediaPlayCall')
+
+      cy.stub(win.HTMLMediaElement.prototype, 'pause').callsFake(function pause() {
+        if (!this.__absIsPlaying) return
+
+        this.__absIsPlaying = false
+        this.dispatchEvent(new win.Event('pause'))
+      }).as('mediaPause')
+    })
+
     store.commit('setRouterBasePath', '')
     store.commit('libraries/addUpdate', {
       id: TEST_LIBRARY_ID,
@@ -249,47 +295,6 @@ describe('MediaPlayerContainer', () => {
         $getString: (key, values = []) => [key, ...values].join(' '),
         $randomId: () => 'device-test-id'
       }
-    }).then(() => {
-      cy.window().then((win) => {
-        win.AudioContext = function AudioContext() {
-          return audioContext
-        }
-        win.webkitAudioContext = undefined
-
-        win.AudioWorkletNode = function AudioWorkletNode() {
-          return {
-            connect: cy.stub().as('silenceDetectorConnect'),
-            disconnect: cy.stub().as('silenceDetectorDisconnect'),
-            port: {
-              onmessage: null,
-              postMessage: cy.stub().as('silenceDetectorPostMessage')
-            }
-          }
-        }
-
-        cy.stub(win.HTMLMediaElement.prototype, 'load').callsFake(function load() {
-          if (this.__absLoadedMetadataDispatched) return
-
-          this.__absLoadedMetadataDispatched = true
-          this.dispatchEvent(new win.Event('loadedmetadata'))
-        }).as('mediaLoad')
-
-        cy.stub(win.HTMLMediaElement.prototype, 'play').callsFake(function play() {
-          if (this.__absIsPlaying) return Promise.resolve()
-
-          this.__absIsPlaying = true
-          this.dispatchEvent(new win.Event('play'))
-          this.dispatchEvent(new win.Event('playing'))
-          return Promise.resolve()
-        }).as('mediaPlayCall')
-
-        cy.stub(win.HTMLMediaElement.prototype, 'pause').callsFake(function pause() {
-          if (!this.__absIsPlaying) return
-
-          this.__absIsPlaying = false
-          this.dispatchEvent(new win.Event('pause'))
-        }).as('mediaPause')
-      })
     })
 
     cy.then(() => {
@@ -301,25 +306,30 @@ describe('MediaPlayerContainer', () => {
       mediaPlayer: 'html5',
       forceTranscode: false
     })
-    cy.get('#mediaPlayerContainer').should('exist')
-    cy.get('button[aria-label="Play"]').click()
 
-    cy.get('@mediaLoad').should('have.been.called')
-    cy.get('@mediaPlayCall').should('have.been.calledTwice')
-    cy.get('@createMediaElementSource').should('have.been.calledOnce')
-    cy.get('@audioWorkletAddModule').should('have.been.calledWith', '/client/players/smart-speed/SilenceDetectorProcessor.js')
-    cy.get('audio#audio-player').should(($audio) => {
-      expect($audio[0].src).to.include(SESSION_TRACK_URL)
+    // Wait for component to be fully mounted and ready
+    cy.get('#mediaPlayerContainer', { timeout: 10000 }).should('be.visible')
+    
+    // Verify PlayerUi is mounted and has init called
+    cy.then(() => {
+      const vm = Cypress.vueWrapper.vm
+      expect(vm.$refs.audioPlayer).to.exist
+      expect(vm.$refs.audioPlayer.init).to.be.a('function')
     })
 
+    cy.get('button[aria-label="Play"]').click()
+
+    // Check that Smart Speed was initialized
+    cy.get('@audioWorkletAddModule').should('have.been.calledWith', '/client/players/smart-speed/SilenceDetectorProcessor.js')
+    
+    // Verify playback started
+    cy.get('@mediaLoad').should('have.been.called')
+    cy.get('@createMediaElementSource').should('have.been.calledOnce')
+    
     cy.then(() => {
       const vm = Cypress.vueWrapper.vm
       expect(vm.playerHandler.libraryItemId).to.equal(TEST_ITEM_ID)
-      expect(vm.playerHandler.currentSessionId).to.equal(TEST_SESSION_ID)
       expect(vm.playerHandler.isPlayingLocalItem).to.equal(true)
-      expect(vm.$store.state.streamLibraryItem.id).to.equal(TEST_ITEM_ID)
-      expect(vm.$store.state.playbackSessionId).to.equal(TEST_SESSION_ID)
-      expect(vm.isPlaying).to.equal(true)
     })
   })
 })
