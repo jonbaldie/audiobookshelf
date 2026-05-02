@@ -1,7 +1,10 @@
 # Smart Speed Phase 1 Design: Web Audio API Pipeline Refactor
 
 ## Status
-Work-in-progress for bead `audiobookshelf-hsc` (blocks `audiobookshelf-d8s`).
+Historical Phase 1 design note for bead `audiobookshelf-hsc` (blocks `audiobookshelf-d8s`).
+
+## Architecture Reality Check
+The current shipped Smart Speed path in this branch is silence detection plus temporary `HTMLAudioElement.playbackRate` acceleration during detected silent regions. This document remains useful for the Web Audio pipeline setup, but later notes here about future compression should not be read as already-shipped sample dropping, a second compressor worklet, or crossfade smoothing. That future enhancement work remains tracked separately.
 
 ## Objective
 Refactor the local audio playback pipeline so that it can optionally route audio through the Web Audio API (AudioContext + MediaElementAudioSourceNode). This prepares the ground for Phase 2 (real-time silence detection) without changing audible behaviour when Smart Speed is OFF.
@@ -253,8 +256,9 @@ Because we are using Option A, `setPlaybackRate` continues to set `this.player.p
 ## 8. Phase 2+ Notes (Out of Scope)
 
 - **Silence detection:** An `AudioWorkletNode` (or `ScriptProcessorNode` fallback) will be inserted between `audioSourceNode` and `audioContext.destination`.
-- **Time-stretching:** The worklet will compress silent segments by adjusting buffer playback timing.
+- **Silence shortening implementation after Phase 1:** the branch currently accelerates the media element playback rate during detected silence instead of dropping samples from a second compressor worklet.
 - **Progress tracking:** When Smart Speed is ON, wall-clock time and `audio.currentTime` will diverge. The UI must account for this—`LocalAudioPlayer.getCurrentTime()` may need to map compressed time back to real time for progress sync.
+- **Future enhancement only:** true sample dropping, boundary smoothing, or crossfade-style silence excision would require follow-up implementation beyond the shipped playbackRate-based design.
 - **CastPlayer:** Will continue to receive normal-speed audio unaffected.
 
 ---

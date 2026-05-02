@@ -190,10 +190,12 @@ The 5 PRs we need to submit upstream are already committed in our repo (or repre
 - **Suggested title:** "Add Smart Speed playback feature" or "Add variable speed playback controls"
 - **Branch name:** `feat/smart-speed-playback`
 - **Description:** This is likely the largest of the 5. Based on upstream patterns, large features get more scrutiny. Prepare:
+  - Keep the framing honest to the shipped implementation: silence detection plus temporary playback-rate acceleration through silent regions, not sample dropping / crossfade smoothing.
   - Clear use-case explanation
   - Manual testing notes across web and mobile clients
   - Screenshots of UI changes
   - Consider breaking into smaller PRs if it touches many files
+  - Treat true sample dropping / second-worklet compression / boundary smoothing as future enhancement work unless audiobookshelf-ax9 is completed first
 - **Risk:** Medium-high. Player features affect UX significantly.
 
 ### General Strategy for All 5 PRs
