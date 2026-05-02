@@ -25,6 +25,45 @@ import '../../plugins/init.client'
 
 import { mount } from 'cypress/vue2'
 
+const shouldForwardBrowserDebug = () => Boolean(Cypress.env('ABS_CYPRESS_DEBUG_BROWSER'))
+
+const formatErrorDetails = (value) => {
+  if (!value) return ''
+  if (value.stack) return value.stack
+  if (typeof value === 'string') return value
+
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+const forwardBrowserDebug = (type, message, details) => {
+  if (!shouldForwardBrowserDebug()) return
+
+  cy.task('absCypressDebug', {
+    type,
+    message,
+    details: formatErrorDetails(details)
+  }, { log: false })
+}
+
+window.addEventListener('error', (event) => {
+  forwardBrowserDebug('window-error', event.message || 'Unhandled window error', event.error)
+})
+
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason
+  const message = reason?.message || 'Unhandled promise rejection'
+  forwardBrowserDebug('unhandledrejection', message, reason)
+})
+
+Cypress.on('fail', (error, runnable) => {
+  forwardBrowserDebug('cypress-fail', `${runnable?.fullTitle?.() || 'Unknown test'} failed`, error)
+  throw error
+})
+
 //Cypress.Commands.add('mount', mount)
 Cypress.Commands.add('mount', (component, options = {}) => {
 
