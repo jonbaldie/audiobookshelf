@@ -36,7 +36,7 @@ class SmartSpeedProcessorCore {
     }
 
     const keepSamples = Math.ceil(durationSamples / this.compressionRatio)
-    this._pendingDropSamples = Math.max(0, durationSamples - keepSamples)
+    this._pendingDropSamples += Math.max(0, durationSamples - keepSamples)
     return this._setActive()
   }
 
@@ -54,9 +54,15 @@ class SmartSpeedProcessorCore {
     }
 
     const becameActive = this._consumeBecameActive()
-    const becameInactive = this._consumeBecameInactive()
+
+    if (this._isActive && this._pendingDropSamples === 0) {
+      this._isActive = false
+      this._becameInactive = true
+    }
 
     if (!this._isActive || this._pendingDropSamples <= 0) {
+      const becameInactive = this._consumeBecameInactive()
+
       return {
         output: inputSamples,
         droppedSamples: 0,
@@ -70,9 +76,12 @@ class SmartSpeedProcessorCore {
     const droppedSamples = Math.min(this._pendingDropSamples, inputSamples.length)
     this._pendingDropSamples -= droppedSamples
     this._droppedSamples += droppedSamples
+    let becameInactive = false
 
     if (this._pendingDropSamples === 0) {
       this._isActive = false
+      this._becameInactive = true
+      becameInactive = this._consumeBecameInactive()
     }
 
     return {
@@ -103,8 +112,7 @@ class SmartSpeedProcessorCore {
   }
 
   _setInactive() {
-    this._pendingDropSamples = 0
-    if (this._isActive) {
+    if (this._isActive && this._pendingDropSamples === 0) {
       this._isActive = false
       this._becameInactive = true
     }
