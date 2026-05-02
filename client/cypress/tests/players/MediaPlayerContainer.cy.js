@@ -193,6 +193,15 @@ describe('MediaPlayerContainer', () => {
         'modals-player-queue-items-modal': { template: '<div />' },
         'modals-chapters-modal': { template: '<div />' },
         'modals-player-settings-modal': { template: '<div />' },
+        'player-ui': {
+          template: '<button aria-label="Play" @click="$emit(\'playPause\')">Play</button>',
+          methods: {
+            setDuration() {},
+            setCurrentTime() {},
+            setBufferTime() {},
+            setStreamReady() {}
+          }
+        },
         'controls-playback-speed-control': { template: '<div />' },
         'controls-volume-control': { template: '<div />' },
         'player-track-bar': { template: '<div />', methods: { setDuration() {}, setUseChapterTrack() {}, setCurrentTime() {}, setBufferTime() {}, setPercentageReady() {} } },
@@ -264,7 +273,10 @@ describe('MediaPlayerContainer', () => {
     })
 
     cy.wait('@getLibraryItem')
-    cy.wait('@startPlaybackSession')
+    cy.wait('@startPlaybackSession').its('request.body').should('deep.include', {
+      mediaPlayer: 'html5',
+      forceTranscode: true
+    })
     cy.get('#mediaPlayerContainer').should('exist')
     cy.get('button[aria-label="Play"]').click()
 
