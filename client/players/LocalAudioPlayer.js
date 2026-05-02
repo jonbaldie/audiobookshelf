@@ -399,8 +399,10 @@ export default class LocalAudioPlayer extends EventEmitter {
   getCurrentTime() {
     var currentTrackOffset = this.currentTrack.startOffset || 0
     if (!this.player) return 0
-    
-    return currentTrackOffset + this.player.currentTime
+
+    const audioTimeMs = (currentTrackOffset + this.player.currentTime) * 1000
+    const wallClockMs = this.enableSmartSpeed ? this.timeMapper.audioToWallClock(audioTimeMs) : audioTimeMs
+    return wallClockMs / 1000
   }
 
   getDuration() {

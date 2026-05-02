@@ -88,4 +88,18 @@ describe('LocalAudioPlayer', () => {
       expect(localPlayer.player.playbackRate).to.equal(1.0);
     });
   });
+
+  it('reports wall-clock current time when smart speed has saved time', () => {
+    const localPlayer = new LocalAudioPlayer({});
+
+    localPlayer.currentTrackIndex = 0;
+    localPlayer.audioTracks = [{ startOffset: 0, duration: 60 }];
+    localPlayer.player.currentTime = 5;
+    localPlayer.smartSpeedRatio = 2.0;
+    localPlayer.enableSmartSpeed = true;
+    localPlayer.silenceMap.addRegion(1000, 3000);
+    localPlayer.updateSmartSpeedRegions();
+
+    expect(localPlayer.getCurrentTime()).to.equal(4);
+  });
 });

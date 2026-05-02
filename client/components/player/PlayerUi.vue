@@ -309,7 +309,7 @@ export default {
         return
       }
       const time = this.useChapterTrack ? Math.max(0, this.currentTime - this.currentChapterStart) : this.currentTime
-      ts.innerText = this.$secondsToTimestamp(time / this.playbackRate)
+      ts.innerText = this.$secondsToTimestamp(time)
     },
     setBufferTime(bufferTime) {
       if (this.$refs.trackbar) this.$refs.trackbar.setBufferTime(bufferTime)
