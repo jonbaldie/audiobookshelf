@@ -66,6 +66,15 @@ const createAudioContextStub = () => {
     disconnect: cy.stub().as('audioSourceDisconnect')
   }
 
+  const silenceDetectorNode = {
+    connect: cy.stub().as('silenceDetectorConnect'),
+    disconnect: cy.stub().as('silenceDetectorDisconnect'),
+    port: {
+      onmessage: null,
+      postMessage: cy.stub().as('silenceDetectorPostMessage')
+    }
+  }
+
   const audioContext = {
     destination: { label: 'destination' },
     state: 'running',
@@ -85,7 +94,7 @@ const createAudioContextStub = () => {
     }
   }
 
-  return { audioContext }
+  return { audioContext, silenceDetectorNode }
 }
 
 describe('MediaPlayerContainer', () => {
@@ -111,11 +120,11 @@ describe('MediaPlayerContainer', () => {
     })
   })
 
-  it('starts playback through the real container session path', () => {
+  it('compresses silence through the real container playback path', () => {
     const store = buildStore()
     const eventBus = new Vue()
     const libraryItem = makeLibraryItem()
-    const { audioContext } = createAudioContextStub()
+    const { audioContext, silenceDetectorNode } = createAudioContextStub()
 
     store.commit('setRouterBasePath', '')
     store.commit('libraries/addUpdate', {
@@ -134,7 +143,7 @@ describe('MediaPlayerContainer', () => {
     })
     store.commit('user/setSettings', {
       ...store.state.user.settings,
-      enableSmartSpeed: false,
+      enableSmartSpeed: true,
       smartSpeedRatio: 2.5,
       playbackRate: 1,
       playbackRateIncrementDecrement: 0.1,
@@ -196,6 +205,7 @@ describe('MediaPlayerContainer', () => {
         'player-ui': {
           template: '<button aria-label="Play" @click="$emit(\'playPause\')">Play</button>',
           methods: {
+            init() {},
             setDuration() {},
             setCurrentTime() {},
             setBufferTime() {},
@@ -246,14 +256,7 @@ describe('MediaPlayerContainer', () => {
         win.webkitAudioContext = undefined
 
         win.AudioWorkletNode = function AudioWorkletNode() {
-          return {
-            connect: cy.stub().as('silenceDetectorConnect'),
-            disconnect: cy.stub().as('silenceDetectorDisconnect'),
-            port: {
-              onmessage: null,
-              postMessage: cy.stub().as('silenceDetectorPostMessage')
-            }
-          }
+          return silenceDetectorNode
         }
 
         cy.stub(win.HTMLMediaElement.prototype, 'load').callsFake(function load() {
@@ -291,23 +294,58 @@ describe('MediaPlayerContainer', () => {
       forceTranscode: false
     })
     cy.get('#mediaPlayerContainer').should('exist')
+    cy.then(() => {
+      Cypress.vueWrapper.vm.$refs.audioPlayer.init()
+    })
     cy.get('button[aria-label="Play"]').click()
 
     cy.get('@mediaLoad').should('have.been.called')
     cy.get('@mediaPlayCall').should('have.been.calledTwice')
     cy.get('@createMediaElementSource').should('have.been.calledOnce')
+    cy.get('@audioWorkletAddModule').should('have.been.calledOnce')
     cy.get('audio#audio-player').should(($audio) => {
       expect($audio[0].src).to.include(SESSION_TRACK_URL)
     })
 
     cy.then(() => {
       const vm = Cypress.vueWrapper.vm
+      const player = vm.playerHandler.player
+      const audioEl = player.player
+
       expect(vm.playerHandler.libraryItemId).to.equal(TEST_ITEM_ID)
-      expect(vm.playerHandler.currentSessionId).to.equal(null)
+      expect(vm.playerHandler.currentSessionId).to.equal(TEST_SESSION_ID)
       expect(vm.playerHandler.isPlayingLocalItem).to.equal(true)
       expect(vm.$store.state.streamLibraryItem.id).to.equal(TEST_ITEM_ID)
-      expect(vm.$store.state.playbackSessionId).to.equal(null)
+      expect(vm.$store.state.playbackSessionId).to.equal(TEST_SESSION_ID)
       expect(vm.isPlaying).to.equal(true)
+      expect(player.enableSmartSpeed).to.equal(true)
+      expect(player.smartSpeedRatio).to.equal(2.5)
+      expect(player.silenceDetectorNode).to.equal(silenceDetectorNode)
+      expect(audioEl.playbackRate).to.equal(1)
+    })
+
+    cy.then(() => {
+      const player = Cypress.vueWrapper.vm.playerHandler.player
+      const audioEl = player.player
+      const startWallClock = Date.now()
+
+      audioContext.currentTime = 1.4
+      audioEl.currentTime = 1.4
+      silenceDetectorNode.port.onmessage({ data: { type: 'silence-start', time: 1400 } })
+      expect(audioEl.playbackRate).to.equal(2.5)
+
+      audioContext.currentTime = 3.0
+      audioEl.currentTime = 3.0
+      silenceDetectorNode.port.onmessage({ data: { type: 'silence-end', time: 3000 } })
+      expect(audioEl.playbackRate).to.equal(1)
+
+      audioEl.currentTime = 3.2
+      audioEl.dispatchEvent(new window.Event('ended'))
+
+      const elapsedMs = Date.now() - startWallClock + 3200 / 2.5
+      expect(elapsedMs).to.be.lessThan(3500)
+      expect(player.silenceMap.getRegions()).to.deep.equal([{ start: 1400, end: 3000 }])
+      expect(player.timeMapper.totalTimeSaved()).to.be.closeTo(960, 0.001)
     })
   })
 })
