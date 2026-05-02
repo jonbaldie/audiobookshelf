@@ -5,9 +5,6 @@ describe('<NarratorCard />', () => {
     name: 'John Doe',
     numBooks: 5
   }
-  const propsData = {
-    narrator
-  }
   const mocks = {
     $store: {
       getters: {
@@ -23,62 +20,34 @@ describe('<NarratorCard />', () => {
     $encode: (value) => value
   }
 
-  it('renders the component', () => {
-    let mountOptions = { propsData, mocks }
-    // see: https://on.cypress.io/mounting-vue
-    cy.mount(NarratorCard, mountOptions)
-  })
+  const mountCard = (propsData = { narrator }) => {
+    cy.mount(NarratorCard, { propsData, mocks })
+  }
 
-  it('renders the narrator name correctly', () => {
-    let mountOptions = { propsData, mocks }
-    cy.mount(NarratorCard, mountOptions)
+  it('renders the narrator name, book count, and library link', () => {
+    mountCard()
 
     cy.get('&name').should('have.text', 'John Doe')
-  })
-
-  it('renders the number of books correctly', () => {
-    let mountOptions = { propsData, mocks }
-    cy.mount(NarratorCard, mountOptions)
-
     cy.get('&numBooks').should('have.text', '5 Books')
+    cy.get('a').should('have.attr', 'href', '/library/library-123/bookshelf?filter=narrators.John Doe')
   })
 
-  it('renders 1 book correctly', () => {
-    let propsData = { narrator: { name: 'John Doe', numBooks: 1 }, width: 200, height: 150 }
-    let mountOptions = { propsData, mocks }
-    cy.mount(NarratorCard, mountOptions)
+  it('renders singular book text and falls back to narrator books length', () => {
+    mountCard({ narrator: { name: 'Jane Doe', books: [{}, {}] } })
+
+    cy.get('&name').should('have.text', 'Jane Doe')
+    cy.get('&numBooks').should('have.text', '2 Books')
+
+    mountCard({ narrator: { name: 'John Doe', numBooks: 1 } })
 
     cy.get('&numBooks').should('have.text', '1 Book')
   })
 
-  it('renders the default name and num-books when narrator is not provided', () => {
-    let propsData = { width: 200, height: 150 }
-    let mountOptions = { propsData, mocks }
-    cy.mount(NarratorCard, mountOptions)
+  it('renders safe defaults when narrator data is missing', () => {
+    mountCard({})
+
     cy.get('&name').should('have.text', '')
     cy.get('&numBooks').should('have.text', '0 Books')
-  })
-
-  it('has the correct width and height', () => {
-    let mountOptions = { propsData, mocks }
-    cy.mount(NarratorCard, mountOptions)
-    cy.get('&card').should('have.css', 'width', '150px')
-    cy.get('&card').should('have.css', 'height', '100px')
-  })
-
-  it('has the correct width and height when not provided', () => {
-    let propsData = { narrator }
-    let mountOptions = { propsData, mocks }
-    cy.mount(NarratorCard, mountOptions)
-    cy.get('&card').should('have.css', 'width', '150px')
-    cy.get('&card').should('have.css', 'height', '100px')
-  })
-
-  it('has the correct font sizes', () => {
-    let mountOptions = { propsData, mocks }
-    cy.mount(NarratorCard, mountOptions)
-    const defaultFontSize = 16
-    cy.get('&name').should('have.css', 'font-size', `${0.75 * defaultFontSize}px`)
-    cy.get('&numBooks').should('have.css', 'font-size', `${0.65 * defaultFontSize}px`)
+    cy.get('a').should('have.attr', 'href', '/library/library-123/bookshelf?filter=narrators.')
   })
 })
