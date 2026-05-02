@@ -49,20 +49,24 @@ const forwardBrowserDebug = (type, message, details) => {
   }, { log: false })
 }
 
-window.addEventListener('error', (event) => {
-  forwardBrowserDebug('window-error', event.message || 'Unhandled window error', event.error)
-})
+if (!window.__absCypressDebugListenersRegistered) {
+  window.addEventListener('error', (event) => {
+    forwardBrowserDebug('window-error', event.message || 'Unhandled window error', event.error)
+  })
 
-window.addEventListener('unhandledrejection', (event) => {
-  const reason = event.reason
-  const message = reason?.message || 'Unhandled promise rejection'
-  forwardBrowserDebug('unhandledrejection', message, reason)
-})
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason
+    const message = reason?.message || 'Unhandled promise rejection'
+    forwardBrowserDebug('unhandledrejection', message, reason)
+  })
 
-Cypress.on('fail', (error, runnable) => {
-  forwardBrowserDebug('cypress-fail', `${runnable?.fullTitle?.() || 'Unknown test'} failed`, error)
-  throw error
-})
+  Cypress.on('fail', (error, runnable) => {
+    forwardBrowserDebug('cypress-fail', `${runnable?.fullTitle?.() || 'Unknown test'} failed`, error)
+    throw error
+  })
+
+  window.__absCypressDebugListenersRegistered = true
+}
 
 //Cypress.Commands.add('mount', mount)
 Cypress.Commands.add('mount', (component, options = {}) => {
