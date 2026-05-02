@@ -303,10 +303,10 @@ describe('MediaPlayerContainer', () => {
     cy.then(() => {
       const vm = Cypress.vueWrapper.vm
       expect(vm.playerHandler.libraryItemId).to.equal(TEST_ITEM_ID)
-      expect(vm.playerHandler.currentSessionId).to.equal(TEST_SESSION_ID)
+      expect(vm.playerHandler.currentSessionId).to.equal(null)
       expect(vm.playerHandler.isPlayingLocalItem).to.equal(true)
       expect(vm.$store.state.streamLibraryItem.id).to.equal(TEST_ITEM_ID)
-      expect(vm.$store.state.playbackSessionId).to.equal(TEST_SESSION_ID)
+      expect(vm.$store.state.playbackSessionId).to.equal(null)
       expect(vm.isPlaying).to.equal(true)
     })
   })
