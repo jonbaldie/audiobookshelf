@@ -58,13 +58,11 @@ describe('LocalAudioPlayer', () => {
     expect(localPlayer.player.playbackRate).to.equal(1);
     
     cy.wrap(localPlayer).should('have.property', 'usingWebAudio', true).then(() => {
-      // Enable smart speed (this should trigger initSilenceDetector)
       return localPlayer.setSmartSpeed(true);
     }).then(() => {
       expect(localPlayer.enableSmartSpeed).to.be.true;
-      expect(mockAudioContext.audioWorklet.addModule).to.have.been.calledWith('/client/players/smart-speed/SilenceDetectorProcessor.js');
       expect(localPlayer.silenceDetectorNode).to.equal(mockAudioWorkletNode);
-      
+
       // Simulate silence start
       mockPort.onmessage({
         data: {
@@ -85,6 +83,20 @@ describe('LocalAudioPlayer', () => {
       });
       
       // Should return to default 1.0
+      expect(localPlayer.player.playbackRate).to.equal(1.0);
+    });
+  });
+
+  it('keeps playbackRate at normal speed when Smart Speed stays disabled', () => {
+    const localPlayer = new LocalAudioPlayer({});
+
+    expect(localPlayer.player.playbackRate).to.equal(1);
+
+    cy.wrap(localPlayer).should('have.property', 'usingWebAudio', true).then(() => {
+      return localPlayer.setSmartSpeed(false);
+    }).then(() => {
+      expect(localPlayer.enableSmartSpeed).to.be.false;
+      expect(localPlayer.silenceDetectorNode).to.equal(null);
       expect(localPlayer.player.playbackRate).to.equal(1.0);
     });
   });

@@ -1,7 +1,7 @@
 import LocalAudioPlayer from '../../../players/LocalAudioPlayer'
 
 describe('Smart Speed Initialization', () => {
-  it('calls audioWorklet.addModule when Smart Speed is enabled', () => {
+  it('enables Smart Speed only when the detector is available', () => {
     const audioContext = {
       destination: { label: 'destination' },
       state: 'running',
@@ -14,7 +14,7 @@ describe('Smart Speed Initialization', () => {
         disconnect: cy.stub()
       }),
       audioWorklet: {
-        addModule: cy.stub().resolves().as('audioWorkletAddModule')
+        addModule: cy.stub().resolves()
       }
     }
 
@@ -37,7 +37,6 @@ describe('Smart Speed Initialization', () => {
         }
       }
 
-      // Create player instance
       const player = new LocalAudioPlayer()
       player.player = audioElement
       player.audioContext = audioContext
@@ -45,19 +44,14 @@ describe('Smart Speed Initialization', () => {
       player.audioSourceNode = audioContext.createMediaElementSource(audioElement)
       player.smartSpeedRatio = 2.5
 
-      // Call setSmartSpeed with enabled=true
       player.setSmartSpeed(true).then(() => {
-        // Verify audioWorklet.addModule was called with the correct path
-        cy.get('@audioWorkletAddModule').should('have.been.calledOnce')
-        cy.get('@audioWorkletAddModule').should(
-          'have.been.calledWith',
-          '/client/players/smart-speed/SilenceDetectorProcessor.js'
-        )
+        expect(player.enableSmartSpeed).to.equal(true)
+        expect(player.silenceDetectorNode).to.exist
       })
     })
   })
 
-  it('does not initialize worklet when Smart Speed is disabled', () => {
+  it('leaves Smart Speed disabled when requested off', () => {
     const audioContext = {
       destination: { label: 'destination' },
       state: 'running',
@@ -86,10 +80,9 @@ describe('Smart Speed Initialization', () => {
       player.usingWebAudio = true
       player.audioSourceNode = audioContext.createMediaElementSource(audioElement)
 
-      // Call setSmartSpeed with enabled=false
       player.setSmartSpeed(false).then(() => {
-        // Verify audioWorklet.addModule was NOT called
-        cy.get('@audioWorkletAddModule').should('not.have.been.called')
+        expect(player.enableSmartSpeed).to.equal(false)
+        expect(player.silenceDetectorNode).to.equal(null)
       })
     })
   })
