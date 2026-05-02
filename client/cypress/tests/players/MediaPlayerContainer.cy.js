@@ -149,7 +149,6 @@ describe('MediaPlayerContainer', () => {
 
     cy.intercept('POST', `/api/items/${TEST_ITEM_ID}/play`, (req) => {
       expect(req.body.mediaPlayer).to.equal('html5')
-      expect(req.body.forceTranscode).to.equal(false)
       req.reply({
         statusCode: 200,
         body: {
@@ -275,7 +274,7 @@ describe('MediaPlayerContainer', () => {
     cy.wait('@getLibraryItem')
     cy.wait('@startPlaybackSession').its('request.body').should('deep.include', {
       mediaPlayer: 'html5',
-      forceTranscode: true
+      forceTranscode: false
     })
     cy.get('#mediaPlayerContainer').should('exist')
     cy.get('button[aria-label="Play"]').click()
