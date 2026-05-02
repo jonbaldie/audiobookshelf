@@ -12,6 +12,7 @@ const FIXTURE_URL = '/__cypress/fixtures/test-audio.wav'
 const TEST_LIBRARY_ID = 'lib-test'
 const TEST_ITEM_ID = 'item-test'
 const TEST_SESSION_ID = 'session-test'
+const SESSION_TRACK_URL = `/public/session/${TEST_SESSION_ID}/track/0`
 
 const makeLibraryItem = () => ({
   id: TEST_ITEM_ID,
@@ -296,7 +297,7 @@ describe('MediaPlayerContainer', () => {
     cy.get('@mediaPlayCall').should('have.been.calledTwice')
     cy.get('@createMediaElementSource').should('have.been.calledOnce')
     cy.get('audio#audio-player').should(($audio) => {
-      expect($audio[0].src).to.include(FIXTURE_URL)
+      expect($audio[0].src).to.include(SESSION_TRACK_URL)
     })
 
     cy.then(() => {
