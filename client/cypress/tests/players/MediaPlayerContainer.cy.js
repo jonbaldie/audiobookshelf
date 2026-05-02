@@ -95,11 +95,18 @@ describe('MediaPlayerContainer', () => {
       win.MediaMetadata = function MediaMetadata(metadata) {
         Object.assign(this, metadata)
       }
-      win.navigator.mediaSession = {
+      const mediaSession = {
         playbackState: 'none',
         metadata: null,
         setActionHandler: cy.stub().as('setActionHandler')
       }
+
+      Object.defineProperty(win.navigator, 'mediaSession', {
+        configurable: true,
+        get() {
+          return mediaSession
+        }
+      })
     })
   })
 
@@ -188,7 +195,7 @@ describe('MediaPlayerContainer', () => {
         'modals-player-settings-modal': { template: '<div />' },
         'controls-playback-speed-control': { template: '<div />' },
         'controls-volume-control': { template: '<div />' },
-        'player-track-bar': { template: '<div />', methods: { setUseChapterTrack() {}, setCurrentTime() {}, setBufferTime() {}, setPercentageReady() {} } },
+        'player-track-bar': { template: '<div />', methods: { setDuration() {}, setUseChapterTrack() {}, setCurrentTime() {}, setBufferTime() {}, setPercentageReady() {} } },
         'nuxt-link': { template: '<a><slot /></a>' }
       },
       mocks: {
