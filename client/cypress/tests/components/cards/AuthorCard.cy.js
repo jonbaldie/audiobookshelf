@@ -21,7 +21,13 @@ describe('AuthorCard', () => {
       LabelBooks: 'Books',
       ButtonQuickMatch: 'Quick Match',
       ToastAuthorUpdateSuccess: 'Author updated',
-      ToastAuthorUpdateSuccessNoImageFound: 'Author updated (no image found)'
+      ToastAuthorUpdateSuccessNoImageFound: 'Author updated (no image found)',
+      ToastNoUpdatesNecessary: 'No updates necessary'
+    },
+    $toast: {
+      success: () => {},
+      error: () => {},
+      info: () => {}
     },
     $store: {
       getters: {
@@ -130,69 +136,64 @@ describe('AuthorCard', () => {
     cy.get('&spinner').should('be.visible')
   })
 
-  it('toasts after quick match with no updates', () => {
+  it('keeps the current author details visible when quick match returns no updates', () => {
     const updatedMocks = {
       ...mocks,
       $axios: {
-        $post: cy.stub().resolves({ updated: false, author: { name: 'John Doe' } })
-      },
-      $toast: {
-        success: cy.spy().as('success'),
-        error: cy.spy().as('error'),
-        info: cy.spy().as('info')
+        $post: cy.stub().as('matchRequest').resolves({ updated: false, author: { ...authorMount } })
       }
     }
     cy.mount(AuthorCard, { ...mountOptions, mocks: updatedMocks })
     cy.get('&card').trigger('mouseover')
     cy.get('&match').click()
 
+    cy.get('@matchRequest').should('have.been.calledOnceWithExactly', '/api/authors/1/match', {
+      q: 'John Doe',
+      region: 'us'
+    })
     cy.get('&spinner').should('be.hidden')
-    cy.get('@success').should('not.have.been.called')
-    cy.get('@error').should('not.have.been.called')
-    cy.get('@info').should('have.been.called')
+    cy.get('&textInline').should('contain.text', 'John Doe')
   })
 
-  it('toasts after quick match with updates and no image', () => {
+  it('sends a quick match request and exits the loading state without an image', () => {
+    const updatedAuthor = { ...authorMount, name: 'John Doe Matched', asin: 'B00MATCHED' }
     const updatedMocks = {
       ...mocks,
       $axios: {
-        $post: cy.stub().resolves({ updated: true, author: { name: 'John Doe' } })
-      },
-      $toast: {
-        success: cy.stub().as('success'),
-        error: cy.spy().as('error'),
-        info: cy.spy().as('info')
+        $post: cy.stub().as('matchRequest').resolves({ updated: true, author: updatedAuthor })
       }
     }
     cy.mount(AuthorCard, { ...mountOptions, mocks: updatedMocks })
     cy.get('&card').trigger('mouseover')
     cy.get('&match').click()
 
+    cy.get('@matchRequest').should('have.been.calledOnceWithExactly', '/api/authors/1/match', {
+      q: 'John Doe',
+      region: 'us'
+    })
     cy.get('&spinner').should('be.hidden')
-    cy.get('@success').should('have.been.calledOnceWithExactly', 'Author updated (no image found)')
-    cy.get('@error').should('not.have.been.called')
-    cy.get('@info').should('not.have.been.called')
+    cy.get('&textInline').should('contain.text', 'John Doe')
+    cy.get('&match').should('be.visible')
   })
 
-  it('toasts after quick match with updates including image', () => {
+  it('sends a quick match request and exits the loading state with an image', () => {
+    const updatedAuthor = { ...authorMount, name: 'John Doe Matched', imagePath: 'path/to/image', asin: 'B00MATCHED' }
     const updatedMocks = {
       ...mocks,
       $axios: {
-        $post: cy.stub().resolves({ updated: true, author: { name: 'John Doe', imagePath: 'path/to/image' } })
-      },
-      $toast: {
-        success: cy.stub().as('success'),
-        error: cy.spy().as('error'),
-        info: cy.spy().as('info')
+        $post: cy.stub().as('matchRequest').resolves({ updated: true, author: updatedAuthor })
       }
     }
     cy.mount(AuthorCard, { ...mountOptions, mocks: updatedMocks })
     cy.get('&card').trigger('mouseover')
     cy.get('&match').click()
 
+    cy.get('@matchRequest').should('have.been.calledOnceWithExactly', '/api/authors/1/match', {
+      q: 'John Doe',
+      region: 'us'
+    })
     cy.get('&spinner').should('be.hidden')
-    cy.get('@success').should('have.been.calledOnceWithExactly', 'Author updated')
-    cy.get('@error').should('not.have.been.called')
-    cy.get('@info').should('not.have.been.called')
+    cy.get('&textInline').should('contain.text', 'John Doe')
+    cy.get('&match').should('be.visible')
   })
 })
