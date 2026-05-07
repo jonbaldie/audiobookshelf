@@ -112,7 +112,7 @@ export default class LocalAudioPlayer extends EventEmitter {
     if (this.silenceDetectorNode) return
 
     try {
-      await this.audioContext.audioWorklet.addModule('/client/players/smart-speed/SilenceDetectorProcessor.js')
+      await this.audioContext.audioWorklet.addModule('/smart-speed/SilenceDetectorProcessor.js')
       this.silenceDetectorNode = new AudioWorkletNode(this.audioContext, 'silence-detector')
 
       this.silenceDetectorNode.port.onmessage = (event) => {
