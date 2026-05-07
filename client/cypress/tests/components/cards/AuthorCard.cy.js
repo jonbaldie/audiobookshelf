@@ -29,6 +29,9 @@ describe('AuthorCard', () => {
       error: () => {},
       info: () => {}
     },
+    $config: {
+      routerBasePath: ''
+    },
     $store: {
       getters: {
         'user/getUserCanUpdate': true,
@@ -140,60 +143,56 @@ describe('AuthorCard', () => {
     const updatedMocks = {
       ...mocks,
       $axios: {
-        $post: cy.stub().as('matchRequest').resolves({ updated: false, author: { ...authorMount } })
+        $post: cy.stub().resolves({ updated: false, author: { ...authorMount, name: 'Unused Match Result', imagePath: 'path/to/unused-image' } })
       }
     }
     cy.mount(AuthorCard, { ...mountOptions, mocks: updatedMocks })
     cy.get('&card').trigger('mouseover')
     cy.get('&match').click()
 
-    cy.get('@matchRequest').should('have.been.calledOnceWithExactly', '/api/authors/1/match', {
-      q: 'John Doe',
-      region: 'us'
-    })
     cy.get('&spinner').should('be.hidden')
     cy.get('&textInline').should('contain.text', 'John Doe')
+    cy.get('&textInline').should('not.contain.text', 'Unused Match Result')
+    cy.get('&imageArea').find('img').should('not.exist')
   })
 
-  it('sends a quick match request and exits the loading state without an image', () => {
+  it('shows the matched author details when quick match updates without an image', () => {
     const updatedAuthor = { ...authorMount, name: 'John Doe Matched', asin: 'B00MATCHED' }
     const updatedMocks = {
       ...mocks,
       $axios: {
-        $post: cy.stub().as('matchRequest').resolves({ updated: true, author: updatedAuthor })
+        $post: cy.stub().resolves({ updated: true, author: updatedAuthor })
       }
     }
     cy.mount(AuthorCard, { ...mountOptions, mocks: updatedMocks })
     cy.get('&card').trigger('mouseover')
     cy.get('&match').click()
 
-    cy.get('@matchRequest').should('have.been.calledOnceWithExactly', '/api/authors/1/match', {
-      q: 'John Doe',
-      region: 'us'
-    })
     cy.get('&spinner').should('be.hidden')
-    cy.get('&textInline').should('contain.text', 'John Doe')
+    cy.get('&textInline').should('contain.text', 'John Doe Matched')
+    cy.get('&imageArea').find('img').should('not.exist')
     cy.get('&match').should('be.visible')
   })
 
-  it('sends a quick match request and exits the loading state with an image', () => {
-    const updatedAuthor = { ...authorMount, name: 'John Doe Matched', imagePath: 'path/to/image', asin: 'B00MATCHED' }
+  it('shows the matched author details and image when quick match updates with an image', () => {
+    const updatedAuthor = { ...authorMount, name: 'John Doe Matched With Image', imagePath: 'path/to/image', updatedAt: 123, asin: 'B00MATCHED' }
     const updatedMocks = {
       ...mocks,
       $axios: {
-        $post: cy.stub().as('matchRequest').resolves({ updated: true, author: updatedAuthor })
+        $post: cy.stub().resolves({ updated: true, author: updatedAuthor })
       }
     }
+    cy.intercept('GET', '/api/authors/1/image?ts=123', { fixture: 'images/cover1.jpg' })
     cy.mount(AuthorCard, { ...mountOptions, mocks: updatedMocks })
     cy.get('&card').trigger('mouseover')
     cy.get('&match').click()
 
-    cy.get('@matchRequest').should('have.been.calledOnceWithExactly', '/api/authors/1/match', {
-      q: 'John Doe',
-      region: 'us'
-    })
     cy.get('&spinner').should('be.hidden')
-    cy.get('&textInline').should('contain.text', 'John Doe')
+    cy.get('&textInline').should('contain.text', 'John Doe Matched With Image')
+    cy.get('&imageArea')
+      .find('img')
+      .should('be.visible')
+      .and('have.attr', 'src', '/api/authors/1/image?ts=123')
     cy.get('&match').should('be.visible')
   })
 })

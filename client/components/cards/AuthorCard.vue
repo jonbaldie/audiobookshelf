@@ -127,6 +127,7 @@ export default {
       if (!response) {
         this.$toast.error(this.$getString('ToastAuthorNotFound', [this.name]))
       } else if (response.updated) {
+        if (response.author) this.setEntity(response.author)
         if (response.author.imagePath) {
           this.$toast.success(this.$strings.ToastAuthorUpdateSuccess)
         } else {
