@@ -16,7 +16,9 @@ Add Smart Speed for local web playback so silent sections longer than 200ms can 
 
 ## Which issue is fixed?
 
-Upstream issue not filed yet. Manager review should decide whether to open an upstream feature request before submission.
+Fixes #3557.
+
+No new upstream issue is needed because advplyr/audiobookshelf#3557 directly covers Smart Speed / trim silence. Closed issue #4155 was marked as a duplicate of #3557.
 
 ## In-depth Description
 
@@ -34,7 +36,10 @@ UI changes include:
 
 ## How have you tested this?
 
-- `npm test -- --runInBand client/cypress/tests/players/LocalAudioPlayer.cy.js`
+- From `client/`: `npm test -- --spec "cypress/tests/players/SmartSpeedE2E.cy.js,cypress/tests/players/LocalAudioPlayer.cy.js"`
+- Result: PASS with Cypress 13.7.3 on Chrome 147 headless, Node v25.9.0.
+- Transcript summary: 2 specs found; `SmartSpeedE2E.cy.js` 1 passing in 1s; `LocalAudioPlayer.cy.js` 2 passing in 34ms; overall 3 passing, 0 failing, 0 pending, 0 skipped; `/usr/bin/time` wall duration real 11.55s (user 4.18, sys 0.90).
+- Notable non-failing warnings: Nuxt warned to use `build.postcss` instead of an external PostCSS config; non-interactive Cypress/Chrome printed `Opening /dev/tty failed (6): Device not configured`.
 - Confirmed the Smart Speed contract covered by tests includes:
   - silence-triggered playbackRate changes
   - wall-clock current time and duration mapping
@@ -44,10 +49,13 @@ UI changes include:
 
 ## Screenshots
 
-Need manager decision on whether to capture fresh screenshots or a short video before upstream submission.
+- Smart Speed settings and compression selector: `client/cypress/screenshots/SmartSpeedUiEvidence.cy.js/smart-speed-settings-and-compression-selector.png`
+- Smart Speed active playback indicator: `client/cypress/screenshots/SmartSpeedUiEvidence.cy.js/smart-speed-active-playback-indicator.png`
+- Reproduction command from `client/`: `npm run compile-tailwind && npx cypress run --component --browser electron --spec "cypress/tests/players/SmartSpeedUiEvidence.cy.js"`
 
 ## Manager review notes
 
-- Upstream issue-first expectation is documented in `UPSTREAM_PR_CONVENTIONS.md`; no upstream issue number is available yet.
-- Upstream-facing verification may need a cleaner targeted command than the current `npm test -- --runInBand client/cypress/tests/players/LocalAudioPlayer.cy.js`, which completed with 389 passing tests but appears to run the broader Mocha suite before the tool timeout.
+- Existing upstream issue #3557 covers Smart Speed / trim silence, so the PR body can use `Fixes #3557`.
+- UI evidence was captured by audiobookshelf-8x1 and is listed above with the reproducible capture command.
+- Clean targeted verification was produced by audiobookshelf-f1m and is listed above.
 - Upstream submission should mention that Smart Speed currently targets local playback only and depends on browser Web Audio support for the silence detector path.
