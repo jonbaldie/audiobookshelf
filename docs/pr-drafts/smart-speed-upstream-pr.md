@@ -16,7 +16,7 @@ Add Smart Speed for local web playback so silent sections longer than 200ms can 
 
 ## Which issue is fixed?
 
-Upstream issue not filed yet. Manager review should decide whether to open an upstream feature request before submission.
+Fixes #3557
 
 ## In-depth Description
 
@@ -48,6 +48,7 @@ Need manager decision on whether to capture fresh screenshots or a short video b
 
 ## Manager review notes
 
-- Upstream issue-first expectation is documented in `UPSTREAM_PR_CONVENTIONS.md`; no upstream issue number is available yet.
+- Upstream issue strategy decided: do not open a new issue. Existing upstream enhancement issue `advplyr/audiobookshelf#3557` ("[Enhancement]: Smart speed / trim silence") directly covers this feature, and closed issue `#4155` was marked as a duplicate of `#3557`.
+- Use `Fixes #3557` in the upstream PR template's issue section so the PR answers upstream convention without creating duplicate public issue noise.
 - Upstream-facing verification may need a cleaner targeted command than the current `npm test -- --runInBand client/cypress/tests/players/LocalAudioPlayer.cy.js`, which completed with 389 passing tests but appears to run the broader Mocha suite before the tool timeout.
 - Upstream submission should mention that Smart Speed currently targets local playback only and depends on browser Web Audio support for the silence detector path.
