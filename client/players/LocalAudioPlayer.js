@@ -121,7 +121,7 @@ export default class LocalAudioPlayer extends EventEmitter {
           // Map AudioContext time to Media time
           const delayMs = this.audioContext.currentTime * 1000 - msg.time
           this._silenceStartTime = this.player.currentTime * 1000 - delayMs
-          
+
           // Dynamically increase playback rate
           if (this.enableSmartSpeed) {
             this.player.playbackRate = this.defaultPlaybackRate * this.smartSpeedRatio
@@ -164,7 +164,7 @@ export default class LocalAudioPlayer extends EventEmitter {
     this.silenceMap.reset()
     this.updateSmartSpeedRegions()
     this._silenceStartTime = null
-    
+
     // Reset playback rate in case we were in the middle of a silence region
     if (this.player) {
       this.player.playbackRate = this.defaultPlaybackRate
@@ -419,7 +419,7 @@ export default class LocalAudioPlayer extends EventEmitter {
   setPlaybackRate(playbackRate) {
     if (!this.player) return
     this.defaultPlaybackRate = playbackRate
-    
+
     // If we're in the middle of a silence region, we should multiply the new rate
     if (this.enableSmartSpeed && this._silenceStartTime !== null) {
       this.player.playbackRate = playbackRate * this.smartSpeedRatio
@@ -454,7 +454,7 @@ export default class LocalAudioPlayer extends EventEmitter {
     this.silenceMap.reset()
     this.updateSmartSpeedRegions()
     this.playWhenReady = playWhenReady
-    
+
     // Reset playback rate in case we were in a silence region
     if (this.enableSmartSpeed && this.player.playbackRate !== this.defaultPlaybackRate) {
       this.player.playbackRate = this.defaultPlaybackRate

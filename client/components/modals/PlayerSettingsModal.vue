@@ -17,9 +17,9 @@
       <div class="flex items-center mb-4">
         <ui-select-input v-model="playbackRateIncrementDecrement" :label="$strings.LabelPlaybackRateIncrementDecrement" menuMaxHeight="250px" :items="playbackRateIncrementDecrementValues" @input="setPlaybackRateIncrementDecrementAmount" />
       </div>
-      
+
       <div v-if="!isCasting" class="w-full h-px bg-white/10 my-6"></div>
-      
+
       <div v-if="!isCasting" class="flex items-center mb-4">
         <ui-toggle-switch v-model="enableSmartSpeed" @input="setEnableSmartSpeed" />
         <div class="pl-4">
@@ -106,10 +106,10 @@ export default {
       this.jumpForwardAmount = this.$store.getters['user/getUserSetting']('jumpForwardAmount')
       this.jumpBackwardAmount = this.$store.getters['user/getUserSetting']('jumpBackwardAmount')
       this.playbackRateIncrementDecrement = this.$store.getters['user/getUserSetting']('playbackRateIncrementDecrement')
-      
+
       const enableSmartSpeed = this.$store.getters['user/getUserSetting']('enableSmartSpeed')
       this.enableSmartSpeed = enableSmartSpeed !== null ? enableSmartSpeed : false
-      
+
       const smartSpeedRatio = this.$store.getters['user/getUserSetting']('smartSpeedRatio')
       this.smartSpeedRatio = smartSpeedRatio !== null ? smartSpeedRatio : 2.5
     }

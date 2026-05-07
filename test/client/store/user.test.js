@@ -34,7 +34,7 @@ describe('User Store Mutations', () => {
     expect(mockState.settings.enableSmartSpeed).to.be.true
     mutations.SET_SMART_SPEED_ENABLED(mockState)
     expect(mockState.settings.enableSmartSpeed).to.be.false
-    
+
     // Check setting explicitly
     mutations.SET_SMART_SPEED_ENABLED(mockState, true)
     expect(mockState.settings.enableSmartSpeed).to.be.true

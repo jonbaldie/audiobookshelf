@@ -326,7 +326,7 @@ export default {
 
       if (this.$refs.trackbar) this.$refs.trackbar.setUseChapterTrack(this.useChapterTrack)
       this.setPlaybackRate(this.playbackRate)
-      
+
       const enableSmartSpeed = this.$store.getters['user/getUserSetting']('enableSmartSpeed')
       const smartSpeedRatio = this.$store.getters['user/getUserSetting']('smartSpeedRatio')
       if (this.playerHandler && this.playerHandler.isPlayingLocalItem) {

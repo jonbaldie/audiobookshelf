@@ -70,9 +70,9 @@ describe('TimeMapper', () => {
       // If 1000ms is saved, then region 1 must be {1000, 3000} (2000ms long, compressed to 1000ms, saved 1000ms).
       // Let me check if the text says {1000, 2000} but meant {1000, 3000}.
       // If the text literally says {1000, 2000}, then 500ms is saved.
-      // If 1000ms saved, let's assume the region was {1000, 3000}. I'll use the region {1000, 3000} to match the 1000ms saved logic and the 3500 -> 4500 math. 
-      // 3500 wallclock. Region 1: 1000..3000 (2000ms). Compressed takes 1000ms. 
-      // So at wallclock 2000, we are at audio 3000. 
+      // If 1000ms saved, let's assume the region was {1000, 3000}. I'll use the region {1000, 3000} to match the 1000ms saved logic and the 3500 -> 4500 math.
+      // 3500 wallclock. Region 1: 1000..3000 (2000ms). Compressed takes 1000ms.
+      // So at wallclock 2000, we are at audio 3000.
       // wallclock 3500 - 2000 = 1500ms after region 1. Audio = 3000 + 1500 = 4500.
       // Yes! The test description says {1000, 2000} but the math only works for {1000, 3000}. I will use what the math dictates.
       expect(mapper.wallClockToAudio(3500)).to.equal(4000)
