@@ -16,12 +16,17 @@ describe('<NarratorCard />', () => {
           currentLibraryId: 'library-123'
         }
       }
-    },
-    $encode: (value) => value
+    }
+  }
+  const stubs = {
+    'nuxt-link': {
+      props: ['to'],
+      template: '<a :href="to"><slot /></a>'
+    }
   }
 
   const mountCard = (propsData = { narrator }) => {
-    cy.mount(NarratorCard, { propsData, mocks })
+    cy.mount(NarratorCard, { propsData, mocks, stubs })
   }
 
   it('renders the narrator name, book count, and library link', () => {
@@ -29,7 +34,7 @@ describe('<NarratorCard />', () => {
 
     cy.get('&name').should('have.text', 'John Doe')
     cy.get('&numBooks').should('have.text', '5 Books')
-    cy.get('a').should('have.attr', 'href', '/library/library-123/bookshelf?filter=narrators.John Doe')
+    cy.get('a').should('have.attr', 'href', '/library/library-123/bookshelf?filter=narrators.Sm9obiBEb2U%3D')
   })
 
   it('renders singular book text and falls back to narrator books length', () => {
