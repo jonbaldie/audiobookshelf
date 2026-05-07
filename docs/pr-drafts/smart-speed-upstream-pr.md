@@ -44,7 +44,11 @@ UI changes include:
 
 ## Screenshots
 
-Need manager decision on whether to capture fresh screenshots or a short video before upstream submission.
+Generated Smart Speed UI evidence from Cypress component execution:
+
+- Smart Speed setting and compression selector: `client/cypress/screenshots/SmartSpeedUiEvidence.cy.js/smart-speed-settings-and-compression-selector.png`
+- Active playback indicator: `client/cypress/screenshots/SmartSpeedUiEvidence.cy.js/smart-speed-active-playback-indicator.png`
+- Reproduction command: `cd client && npm run compile-tailwind && npx cypress run --component --browser electron --spec "cypress/tests/players/SmartSpeedUiEvidence.cy.js"`
 
 ## Manager review notes
 
