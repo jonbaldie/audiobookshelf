@@ -34,13 +34,41 @@ UI changes include:
 
 ## How have you tested this?
 
-- `npm test -- --runInBand client/cypress/tests/players/LocalAudioPlayer.cy.js`
-- Confirmed the Smart Speed contract covered by tests includes:
-  - silence-triggered playbackRate changes
-  - wall-clock current time and duration mapping
-  - seek mapping through the same wall-clock domain
-  - media progress and playback session calculations using coherent current time and duration values
-- Reviewed the real-audio Cypress coverage in `client/cypress/tests/players/SmartSpeedE2E.cy.js` for PR talking points and follow-up verification planning
+- From `client/`: `npm test -- --spec "cypress/tests/players/SmartSpeedE2E.cy.js,cypress/tests/players/LocalAudioPlayer.cy.js"`
+- Result: PASS in 11.55s wall time (`/usr/bin/time -p`; Cypress reported 3 passing tests across 2 specs, with no failures, pending tests, skipped tests, screenshots, or video)
+- Transcript summary:
+
+```text
+> audiobookshelf-client@2.34.0 test
+> npm run compile-tailwind && cypress run --component --browser chrome --spec cypress/tests/players/SmartSpeedE2E.cy.js,cypress/tests/players/LocalAudioPlayer.cy.js
+
+> audiobookshelf-client@2.34.0 compile-tailwind
+> npx @tailwindcss/cli -i ./assets/tailwind.css -o ./cypress/support/tailwind.compiled.css
+
+≈ tailwindcss v4.0.14
+Done in 78ms
+
+Running: SmartSpeedE2E.cy.js (1 of 2)
+  Smart Speed E2E with Real Audio
+    ✓ compresses silence with real audio and real Web Audio API (1188ms)
+  1 passing (1s)
+
+Running: LocalAudioPlayer.cy.js (2 of 2)
+  LocalAudioPlayer
+    ✓ increases playbackRate during silence (19ms)
+    ✓ maps currentTime, duration, and seek through the same Smart Speed wall-clock contract (6ms)
+  2 passing (34ms)
+
+All specs passed: 3 passing, 0 failing, 0 pending, 0 skipped
+real 11.55
+user 4.18
+sys 0.90
+```
+
+- Notable warnings during the clean run:
+  - Nuxt warned to use `build.postcss` in `nuxt.config.js` instead of an external PostCSS config file.
+  - Cypress/Chrome printed `Opening /dev/tty failed (6): Device not configured` in the non-interactive shell.
+- Confirmed the Smart Speed verification includes real-audio Web Audio smoke coverage plus LocalAudioPlayer contract coverage for silence-triggered `playbackRate` changes, wall-clock current time and duration mapping, and seek mapping through the same wall-clock domain.
 
 ## Screenshots
 
@@ -49,5 +77,5 @@ Need manager decision on whether to capture fresh screenshots or a short video b
 ## Manager review notes
 
 - Upstream issue-first expectation is documented in `UPSTREAM_PR_CONVENTIONS.md`; no upstream issue number is available yet.
-- Upstream-facing verification may need a cleaner targeted command than the current `npm test -- --runInBand client/cypress/tests/players/LocalAudioPlayer.cy.js`, which completed with 389 passing tests but appears to run the broader Mocha suite before the tool timeout.
+- Upstream-facing verification now has a clean targeted client-package Cypress transcript with no timeout ambiguity.
 - Upstream submission should mention that Smart Speed currently targets local playback only and depends on browser Web Audio support for the silence detector path.
